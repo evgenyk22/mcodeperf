@@ -22,7 +22,6 @@ EZTop Search;
 /******************************************************************************
    Resource Init Instruction
 *******************************************************************************/
-LdReg TRIG_ADDR[0], ALST_SRH_TCAM_LOOKASIDE_CALLBACK;
 
 // Mask registers
 LDREG   MREG[0],           0x00000201;
@@ -343,39 +342,44 @@ L_ROUTING_COMMON:
    halt;
 
 
-////////////////////////////////////////////////
-//    Policy Handling
-////////////////////////////////////////////////
-
-public POLICY_START:
-
-   // ##AMIT_GUY: for TCAM keys integration to combined concurrent lookups, change the code so that if routing mode then perform the TCAM RoutingTableIndexLookup from here using relevant profile, instead of calling TOPsearch CMP_ROUTING_TABLE_INDEX_TCAM_LAB. Guy will integrate the 3 lookups to one concurent lookup.
-   // Common handling of policies, applies both to tagged and untagged frames
-   Policy_Treat;
-
-
-
-////////////////////////////////////////////////
-//    OOS Handling
-////////////////////////////////////////////////
-
-public OOS_START:
-
-#if 0
-LookUp OREG , TCP_OOS_STR , TREG[0] , TCP_OOS_KEY_SIZE,  TREG[ 0 ], 0 , WR_LAST; 
-
-//LookUp OREG , TCP_OOS_STR , TREG[0] , 4,  TREG[ 0 ], 0 , WR_LAST; 
-//LookUp OREG , TCP_OOS_STR , TREG[1] , 1 ,  TREG[ 0 ], 0 , WR_LAST; 
-//write OREG , TCP_OOS_STR , TREG[32] , 4 , WR_LAST; 
-halt;
-#endif
 
 
 //////////////////////////////////////////////
 //      SYN Protection Handling
 //////////////////////////////////////////////
 
-Public NON_SYN_PROT_DEST_START:
+#define TREG_TCAM_RESULT_OFF           96 /*{68+4}*/  // Size 4 bytes
+#define    TREG_TCAM_IDX_OFF           (TREG_TCAM_RESULT_OFF + 1) // Size 3 bytes
+#define    TREG_TCAM_IDX_UNF_OFF       (TREG_TCAM_RESULT_UNF_OFF + 1) // Size 3 bytes
+
+Public MAIN_START:
+
+MAIN:
+// Put byte 2 of SYN_PROT_DEST_STR result in CondReg
+//WriteCond COND_REG, TREG[UNF_TASK_CNTR]; 
+
+Jmul  TREG[UNF_TASK_CNTR],
+      EMPTY,
+      EMPTY, 
+      EMPTY,
+      ACCESS_LIST,
+      POLICY , 
+      SYN,
+      BDOS,  
+      RESET,NO_DEFAULT_JUMP;
+ 
+//no more jobs , terminate
+//Write TREG[0] , TREG[0] , 0 , WR_LAST;
+
+
+Write  TREG[0], SYN_PROT_DEST_STR, 
+      TREG[0], SYN_PROT_DEST_RES_SIZE,  
+      WR_LAST; 
+
+
+Halt;
+
+ACCESS_LIST:
 
 LookupTCAM 	   TREG[TREG_TCAM_RESULT_UNF_OFF] , EXT_TCAM_STR,
       			TREG[0], 21,      // DPORT(2), VLAN(2), DIP(16), Phys PORT(1)
@@ -389,202 +393,95 @@ JMatch L_ALST_MATCH_IN_TCAM_CONT;
 
    movImm  TREG[TREG_TCAM_RESULT_UNF_OFF], 0x1 , 4; 
    write OREG, ALST_RES_STR, TREG[TREG_TCAM_RESULT_UNF_OFF], ALST_RES_SIZE ,  NO_WR_LAST;
-
-WriteCond COND_REG, TREG[UNF_PROT_POLICY_PHASE_OFF].bit[4], SET_MATCH_BIT;   
-JCond;                    
-JMatch Policy_Phase1_NON_SYN;
-
-Policy_Phase0_NON_SYN:
-LookupTCAM TREG[TREG_TCAM_RESULT_UNF_OFF], EXT_TCAM_STR, 
-              TREG[UNF_PROT_VLAN_OFF     ],  19, // unified [ key vlan { 2 byte } + DIP {16 byte} + phys port { 1 byte } 
-              TREG[UNF_PROT_SIP_OFF   ], /*16*/21, // unified [ SIP { 16 byte} ]  
-              PROFILE EXT_TCAM_LINE_NUM_POLICY_PHASE0, NO_WR_LAST;
-
-WriteCond COND_REG, TREG[TREG_TCAM_RESULT_UNF_OFF].bit[4], SET_MATCH_BIT;   
-JCond;                    
-JNoMatch L_POLICY_SIP_NO_MATCH_IN_TCAM;
-
-Lookup OREG, POLICY_RES_STR,
-		 TREG[TREG_TCAM_IDX_UNF_OFF], POLICY_RES_KEY_SIZE,
-       TREG[TREG_TCAM_IDX_UNF_OFF], 0,
-       WR_LAST;  
-
-Halt;
-
-Policy_Phase1_NON_SYN:
-
-LookupTCAM TREG[TREG_TCAM_RESULT_UNF_OFF], EXT_TCAM_STR, 
-              TREG[UNF_PROT_VLAN_OFF     ],  19, // unified [ key vlan { 2 byte } + DIP {16 byte} + phys port { 1 byte } 
-              TREG[UNF_PROT_SIP_OFF   ], /*16*/21, // unified [ SIP { 16 byte} ]  
-              PROFILE EXT_TCAM_LINE_NUM_POLICY_PHASE1, NO_WR_LAST;
-
-//parallel THREAD_ID_MASK 1; // don't wait for INT_TCAM_STR result
-WriteCond COND_REG, TREG[TREG_TCAM_RESULT_UNF_OFF].bit[4], SET_MATCH_BIT;   
-//parallel THREAD_ID_MASK 1; // don't wait for INT_TCAM_STR result
-JCond;                    
-JNoMatch L_POLICY_SIP_NO_MATCH_IN_TCAM;
-
-Lookup OREG, POLICY_RES_STR,
-		 TREG[TREG_TCAM_IDX_UNF_OFF], POLICY_RES_KEY_SIZE,
-       TREG[TREG_TCAM_IDX_UNF_OFF], 0,
-       WR_LAST;  
-
-Halt;
-
-//////////////////////////////////////////////
-//      SYN Protection Handling
-//////////////////////////////////////////////
-
-Public SYN_PROT_DEST_START:
-
-#define TREG_SYN_PROT_OFF        64;
-#define TREG_CONTENDER_OFF      (TREG_SYN_PROT_OFF + SYN_PROT_DEST_RES_SIZE);  // 64 + 16
-#define TREG_AUTH_OFF           (TREG_SYN_PROT_OFF + SYN_PROT_DEST_RES_SIZE);  // 64 + 16
-
-#ifndef __SIM__
-
-//LookupTCAM 	   TREG[TREG_TCAM_RESULT_OFF], EXT_TCAM_STR, TREG[0], 32, TREG[32], 8, PROFILE 0, NO_WR_LAST;
-LookupTCAM 	   CTX CTX_LINE_DUMMY_FOR_TCAM , EXT_TCAM_STR,
-      			TREG[0], 22,
-               TREG[32], 18,
-      			PROFILE 0, NO_WR_LAST, TRIG_ADDR[0]; 
-
-#else
-
-// AccessList
-LookupTCAM 	   TREG[TREG_TCAM_RESULT_UNF_OFF] , EXT_TCAM_STR,
-      			TREG[0], 21,      // DPORT(2), VLAN(2), DIP(16), Phys PORT(1)
-               TREG[32], 19,     // SIP(16),  SPORT(2), L4_TYPE(1)
-      			PROFILE EXT_TCAM_LINE_NUM_ALST, NO_WR_LAST; 
-//   LookupTCAM 	TREG[TREG_TCAM_RESULT_OFF], EXT_TCAM_STR, TREG[0], 32, TREG[32], 8, PROFILE EXT_TCAM_LINE_NUM_ALST, NO_WR_LAST;
-
-
-//Lookup  TREG[TREG_TCAM_RESULT_OFF], CTX_STR , TREG[UNF_CTX_STR_IDX] , 1 , TREG[32] , 0 , NO_WR_LAST;
-
-   //JNoMatch L_ALST_NO_MATCH_IN_TCAM;
-WriteCond COND_REG , TREG[TREG_TCAM_RESULT_UNF_OFF].bit[4] , SET_MATCH_BIT;  
-
-Jcond;
-JNoMatch L_ALST_NO_MATCH_IN_TCAM_CONT;
-
+   Jcond;
+   jmp MAIN;
+    
 L_ALST_MATCH_IN_TCAM_CONT:
+
+//access list glob threfore no need 2 cont after hit
 Lookup 	OREG, ALST_RES_STR,
 				TREG[TREG_TCAM_IDX_UNF_OFF], ALST_KEY_SIZE,
             WR_LAST;
-       
-Halt;
-#endif 
+   
+halt;
 
-L_ALST_NO_MATCH_IN_TCAM_CONT:
+//WriteCond COND_REG, TREG[UNF_PROT_POLICY_PHASE_OFF].bit[4], SET_MATCH_BIT;   
+//JCond;                    
+//JMatch Policy_Phase1_NON_SYN;
 
-   //set valid + no match bit
-   movImm  TREG[TREG_TCAM_RESULT_UNF_OFF], 0x1 , 4; 
-   write OREG, ALST_RES_STR, TREG[TREG_TCAM_RESULT_UNF_OFF], ALST_RES_SIZE ,  NO_WR_LAST;
-
-//   Halt;
-
-
-      //Halt ?????????????
-
-// Lookup with Policy full key in External TCAM
-#if 0
-#ifndef __SIM__
-// Syn Protected Destination
-LookupTCAM TREG[TREG_SYN_PROT_OFF], INT_TCAM_STR, 
-           TREG[UNF_PROT_DPORT_OFF], 26/*21*/,		// SYN_PROT_DPORT_OFF (2bytes) + SYN_PROT_VLAN_OFF (2bytes) + SYN_PROT_DIP_OFF (16bytes) + SYN_PROT_PORT_OFF (1byte) + SYN_PROT_PHASE_OFF (1byte)
-           PROFILE INT_TCAM_LINE_NUM_SYN_PROT, NO_WR_LAST,
-           /*THREAD_ID 3,*/ KEEP_PREV_CTRL_BITS, NO_WR_LAST;
-
-#else
-
-LookupTCAM TREG[TREG_SYN_PROT_OFF], INT_TCAM_STR, 
-           TREG[UNF_PROT_DPORT_OFF], 26/*21*/,		// SYN_PROT_DPORT_OFF (2bytes) + SYN_PROT_VLAN_OFF (2bytes) + SYN_PROT_DIP_OFF (16bytes) + SYN_PROT_PORT_OFF (1byte) + SYN_PROT_PHASE_OFF (1byte)
-           PROFILE INT_TCAM_LINE_NUM_SYN_PROT, NO_WR_LAST,
-           THREAD_ID 3, KEEP_PREV_CTRL_BITS, NO_WR_LAST;
-#endif 
-
-	//parallel THREAD_ID_MASK 8; // don't wait for INT_TCAM_STR result
-/*
-shr TREG[UNF_PROT_POLICY_PHASE_OFF], TREG[UNF_PROT_POLICY_PHASE_OFF], 4, 1;
-Or  TREG[UNF_PROT_POLICY_PHASE_OFF], TREG[UNF_PROT_POLICY_PHASE_OFF], 0x2, 1, MASK_00000001, MASK_SRC1;
-WriteIndReg TREG[UNF_PROT_POLICY_PHASE_OFF];
-Nop;
-Nop;
-Nop;
-*/
-#endif
+POLICY:
 WriteCond COND_REG, TREG[UNF_PROT_POLICY_PHASE_OFF].bit[4], SET_MATCH_BIT;   
 JCond;                    
-JMatch Policy_Phase1;
+JNoMatch POLICYP0;
+WriteIndreg POLICY_RES_CONF_STR_P1 ;
 
-Policy_Phase0:
 LookupTCAM TREG[TREG_TCAM_RESULT_UNF_OFF], EXT_TCAM_STR, 
               TREG[UNF_PROT_VLAN_OFF     ],  19, // unified [ key vlan { 2 byte } + DIP {16 byte} + phys port { 1 byte } 
               TREG[UNF_PROT_SIP_OFF   ], /*16*/21, // unified [ SIP { 16 byte} ]  
-              PROFILE EXT_TCAM_LINE_NUM_POLICY_PHASE0, NO_WR_LAST;
+              PROFILE EXT_TCAM_LINE_NUM_POLICY_PHASE0 /*EXT_TCAM_LINE_NUM_POLICY_PHASE1*/, NO_WR_LAST;
 
-WriteCond COND_REG, TREG[TREG_TCAM_RESULT_UNF_OFF].bit[4], SET_MATCH_BIT;   
-JCond;                    
-JNoMatch L_POLICY_SIP_NO_MATCH_IN_TCAM;
-Nop;
-/*
-Lookup OREG, POLICY_RES_STR,
-		 TREG[TREG_TCAM_IDX_UNF_OFF], POLICY_RES_KEY_SIZE,
-       TREG[TREG_TCAM_IDX_UNF_OFF], 0,
-       WR_LAST_IF_NO_JUMP;
-*/
-Lookup TREG[TREG_TCAM_RESULT_UNF_OFF] /*OREG*/, POLICY_RES_STR,
-		 TREG[TREG_TCAM_IDX_UNF_OFF], POLICY_RES_KEY_SIZE,
-       TREG[TREG_TCAM_IDX_UNF_OFF], 0,
-       NO_WR_LAST;
-
-
-//JMatch SYN_PROT_START;
-//Halt;
-JNoMatch L_POLICY_SIP_NO_MATCH_IN_TCAM;
-
-Write  OREG, POLICY_RES_STR,TREG[TREG_TCAM_RESULT_UNF_OFF], POLICY_RES_RES_SIZE, TREG[TREG_TCAM_IDX_UNF_OFF], 0,NO_WR_LAST;
-Jmp SYN_PROT_START;
-
-Policy_Phase1:
+jmp  POLICYTCAM_END;
+POLICYP0:
+ 
+WriteIndreg POLICY_RES_CONF_STR_P1 ;
 LookupTCAM TREG[TREG_TCAM_RESULT_UNF_OFF], EXT_TCAM_STR, 
               TREG[UNF_PROT_VLAN_OFF     ],  19, // unified [ key vlan { 2 byte } + DIP {16 byte} + phys port { 1 byte } 
               TREG[UNF_PROT_SIP_OFF   ], /*16*/21, // unified [ SIP { 16 byte} ]  
               PROFILE EXT_TCAM_LINE_NUM_POLICY_PHASE1, NO_WR_LAST;
 
-//parallel THREAD_ID_MASK 1; // don't wait for INT_TCAM_STR result
+POLICYTCAM_END:
+
 WriteCond COND_REG, TREG[TREG_TCAM_RESULT_UNF_OFF].bit[4], SET_MATCH_BIT;   
-//parallel THREAD_ID_MASK 1; // don't wait for INT_TCAM_STR result
 JCond;                    
-JNoMatch L_POLICY_SIP_NO_MATCH_IN_TCAM;
-Nop;
-Lookup TREG[TREG_TCAM_RESULT_UNF_OFF] /*OREG*/, POLICY_RES_STR,
-		 TREG[TREG_TCAM_IDX_UNF_OFF], POLICY_RES_KEY_SIZE,
-       TREG[TREG_TCAM_IDX_UNF_OFF], 0,
+JNoMatch POLICY_NO_MATCH;
+
+nop;
+Lookup TREG[ TREG_TCAM_RESULT_OFF  ], POLICY_RES_STR,
+		 TREG[ TREG_TCAM_IDX_UNF_OFF ], POLICY_RES_KEY_SIZE,
+       TREG[ TREG_TCAM_IDX_UNF_OFF ], 0,
        NO_WR_LAST;  
 
 
 
-//JMatch SYN_PROT_START; 
-JNoMatch L_POLICY_SIP_NO_MATCH_IN_TCAM;    
+     //policy configuration result start from 64
+Lookup TREG[ TREG_TCAM_RESULT_OFF ], IND_REG,
+		  TREG[ { TREG_TCAM_RESULT_OFF + 3 } ], 2 ,TREG[TREG_TCAM_IDX_OFF], 0,RES_SIZE 32 ,
+        NO_WR_LAST; 
 
-Write  OREG, POLICY_RES_STR,TREG[TREG_TCAM_RESULT_UNF_OFF], POLICY_RES_RES_SIZE, TREG[TREG_TCAM_IDX_UNF_OFF], 0,NO_WR_LAST;  
-  
-//Halt;
+Write OREG , POLICY_RES_CONF_STR , TREG[TREG_TCAM_RESULT_OFF] , 32  ,  NO_WR_LAST;
+
+jcond;
+jmp  MAIN;
+
+POLICY_NO_MATCH:
+
+   // If there is no match Policy for full key - set valid + no match bit
+   MovImm TREG[TREG_TCAM_RESULT_OFF], 0x1, 4; 
+
+   // Write no match result
+   Write OREG, POLICY_RES_STR, 
+         TREG[TREG_TCAM_RESULT_OFF], POLICY_RES_RES_SIZE,
+         WR_LAST; 
+
+   // no need 2 continue
+   Halt;
+
 
 #define POLICY_ID_OFFSET  3
 #define POLICY_ID_SIZE    2
+#define TREG_SYN_PROT_OFF        64;
+#define TREG_CONTENDER_OFF      (TREG_SYN_PROT_OFF + SYN_PROT_DEST_RES_SIZE);  // 64 + 16
+#define TREG_AUTH_OFF           (TREG_SYN_PROT_OFF + SYN_PROT_DEST_RES_SIZE);  // 64 + 16 
 
-
-SYN_PROT_START:
+SYN:
 
 // Lookup in Int.TCAM to find a key for SYN Protection table
 Nop;
 Nop;
-Write  TREG[{UNF_PROT_PHASE_OFF+1}] ,POLICY_RES_STR ,  TREG[{TREG_TCAM_RESULT_UNF_OFF+3}] , POLICY_ID_SIZE;
+Write  TREG[{ UNF_PROT_PHASE_OFF + 1}] ,POLICY_RES_STR ,  TREG[{ TREG_TCAM_RESULT_OFF + 2 }] , POLICY_ID_SIZE;
 
 LookupTCAM TREG[TREG_SYN_PROT_OFF], INT_TCAM_STR,
-           TREG[UNF_PROT_DPORT_OFF], 24,		// SYN_PROT_DPORT_OFF (2bytes) + SYN_PROT_VLAN_OFF (2bytes) + SYN_PROT_DIP_OFF (16bytes) + SYN_PROT_PORT_OFF (1byte)
+           TREG[UNF_PROT_DPORT_OFF], 26,		// SYN_PROT_DPORT_OFF (2bytes) + SYN_PROT_VLAN_OFF (2bytes) + SYN_PROT_DIP_OFF (16bytes) + SYN_PROT_PORT_OFF (1byte)
            PROFILE INT_TCAM_LINE_NUM_SYN_PROT, NO_WR_LAST , NO_KEEP_PREV_CTRL_BITS;
 
 
@@ -604,9 +501,9 @@ JMatch SYN_PROT_CONT;
 // Write result of lookup in SYN_PROT_DEST_STR (this will also include results from Authentication & Contender tables)
 Write OREG, SYN_PROT_DEST_STR, 
       TREG[TREG_SYN_PROT_OFF], SYN_PROT_DEST_RES_SIZE, 
-      WR_LAST; 
-
-Halt;
+      NO_WR_LAST; 
+Jcond;
+jmp MAIN;
 
 
 SYN_PROT_CONT:
@@ -625,9 +522,9 @@ JMul  CONT_AND_AUTH_TBL_LKP_LAB,
 // Write result of lookup in SYN_PROT_DEST_STR (this will also include results from Authentication & Contender tables)
 Write OREG, SYN_PROT_DEST_STR, 
       TREG[TREG_SYN_PROT_OFF], SYN_PROT_DEST_RES_SIZE,  
-      WR_LAST; 
-
-Halt;
+      NO_WR_LAST; 
+jcond;
+jmp MAIN;
 
 
 CONT_AND_AUTH_TBL_LKP_LAB:
@@ -691,199 +588,21 @@ SYN_PROT_END_LAB:
 // Write result of lookup in SYN_PROT_DEST_STR (this will also include results from Authentication & Contender tables)
 Write OREG, SYN_PROT_DEST_STR, 
       TREG[TREG_SYN_PROT_OFF], SYN_PROT_DEST_RES_SIZE,  
-      WR_LAST; 
-
-Halt;
-
-
-////////////////////////////////////////////////
-//    AccessList Handling
-////////////////////////////////////////////////
-
-Public ALST_SRH_TCAM_LOOKASIDE_CALLBACK/*ALST_EXT_TCAM_LOOKUP*/:
-   
-
-   Lookup  TREG[TREG_TCAM_RESULT_OFF], CTX_STR , TREG[0] , 1 , TREG[32] , 0 , NO_WR_LAST;
-
-   //JNoMatch L_ALST_NO_MATCH_IN_TCAM;
-   WriteCond COND_REG , TREG[TREG_TCAM_RESULT_OFF].bit[4] , SET_MATCH_BIT;  
-
-   Jcond;
-   JNoMatch L_ALST_NO_MATCH_IN_TCAM;
-
-   Lookup 	OREG, ALST_RES_STR,
-				TREG[TREG_TCAM_IDX_OFF], ALST_KEY_SIZE,
-            WR_LAST;
-
-   Halt;
-   
-      
-L_ALST_NO_MATCH_IN_TCAM:
-
-   //set valid + no match bit
-   movImm  TREG[TREG_TCAM_RESULT_OFF], 0x1 , 4; 
-   write OREG, ALST_RES_STR, TREG[TREG_TCAM_RESULT_OFF], ALST_RES_SIZE ,  WR_LAST;   
-
-   Halt;
+      NO_WR_LAST; 
+jcond;
+jmp MAIN;
 
 
-L_POLICY_SIP_NO_MATCH_IN_TCAM:
-
-   // If there is no match Policy for full key - set valid + no match bit
-   MovImm TREG[TREG_TCAM_RESULT_OFF], 0x1, 4; 
-
-   // Write no match result
-   Write OREG, POLICY_RES_STR, 
-         TREG[TREG_TCAM_RESULT_OFF], POLICY_RES_RES_SIZE,
-         WR_LAST; 
-
-   Halt;
-
-// For Ext.TCAM lookaside:
-/*
-
-Public ALST_EXT_TCAM_LOOKUP:
+BDOS:
 
 
-   LookupTCAM 	CTX CTX_LINE_TCAM, EXT_TCAM_STR , TREG[0], 32 , TREG[32], 8, PROFILE 0 , WR_LAST;
-   Halt;
 
 
-public ALST_SRH_READ_CTX_TCAM_RES:
 
    
-   movImm  TREG[0], CTX_LINE_TCAM, 1;
-
-	Lookup 	TREG[TREG_TCAM_RESULT_OFF], CTX_STR,
-				TREG[0], 1, //treg 0 containes ctx line number         
-				TREG[32], 0,
-            NO_WR_LAST;
-   JNoMatch L_SRH_WAIT_TCAM_RES_LOOP;  
-
-L_SRH_CTX_TCAM_RES_VALID:
-
-   WriteCond COND_REG, TREG[TREG_TCAM_RESULT_OFF].bit[4], SET_MATCH_BIT;
-   JCond;
-   JNoMatch L_ALST_NO_MATCH_IN_TCAM;
-
-
-
-   Lookup 	OREG, ALST_RES_STR,
-				TREG[TREG_TCAM_IDX_OFF], ALST_KEY_SIZE,
-            WR_LAST;
-
-   Halt;
-
-
-L_ALST_NO_MATCH_IN_TCAM:
-
-   //set valid no match bit
-   movImm  TREG[TREG_TCAM_RESULT_OFF], 0x1 , 4;
-   write OREG, ALST_RES_STR, TREG[TREG_TCAM_RESULT_OFF], ALST_RES_SIZE ,  WR_LAST;   
-
-   Halt;
-
-L_SRH_WAIT_TCAM_RES_LOOP:
-
-   movImm  TREG[0], CTX_LINE_TCAM, 1;
-
-   //initiate value for timer counter - used as workaround in case of single engine (see explanations below). 
-   movImm  TREG[TREG_TIMER_COUNTER_OFF], TREG_TIMER_COUNTER_VALUE, 1;
-
-   L_SRH_READ_CTX_TCAM_RES_LOOP:
-	   Lookup 	TREG[TREG_TCAM_RESULT_OFF], CTX_STR,
-	   			TREG[0], 1,         
-   				TREG[48], 0,
-               NO_WR_LAST;
-      JMatch L_SRH_CTX_TCAM_RES_VALID; // JMatch checks the validity of the result - if the result is valid, jump back to the main flow, otherwise - continue with the timer mechanism waiting
-
-   //decrease the counter by 1   
-   sub TREG[TREG_TIMER_COUNTER_OFF], TREG[TREG_TIMER_COUNTER_OFF], 1, 1;
-   //check the counter value - is it equal 0?
-   cmp TREG[TREG_TIMER_COUNTER_CALC_OFF], TREG[TREG_TIMER_COUNTER_OFF], 0x0, 1;              //compare the counter value vs. 0. the result will be written in TREG
-
-   //jump condition                   
-   jcond TREG[TREG_TIMER_COUNTER_CALC_OFF], WR_LAST_IF_NO_JUMP;
-   JMaskMatch 0x02, L_SRH_READ_CTX_TCAM_RES_LOOP;
-
-   //set valid no match bit
-   movImm  TREG[TREG_TCAM_RESULT_OFF], 0x1 , 4; 
-   write OREG, ALST_RES_STR, TREG[TREG_TCAM_RESULT_OFF], ALST_RES_SIZE ,  WR_LAST;   
-
-   //Now it means that we waited enough, timer expired 
-   Halt;
-
-*/
- 
-
-////////////////////////////////////////////////
-//    BDOS Attack Handling
-////////////////////////////////////////////////
-
-// L3 Attacks - IPv4, IPv6
-
-public ATTACK_IPV4_START_P0:
-Attack_IPV4_Treat 0;
-Write OREG, BDOS_ATTACK_RESULTS_L23_2_STR, TREG[TREG_BDOS_RES_OFF], BDOS_ATTACK_RESULT_SIZE, WR_LAST;
-Halt;
-
-public ATTACK_IPV4_START_P1:
-Attack_IPV4_Treat 32;
-Write OREG, BDOS_ATTACK_RESULTS_L23_2_STR, TREG[TREG_BDOS_RES_OFF], BDOS_ATTACK_RESULT_SIZE, WR_LAST;
-Halt;
-
-public ATTACK_IPV6_START_P0:
-Attack_IPV6_Treat 0;
-Write OREG, BDOS_ATTACK_RESULTS_L23_2_STR, TREG[TREG_BDOS_RES_OFF], BDOS_ATTACK_RESULT_SIZE, WR_LAST;
-Halt;
-
-public ATTACK_IPV6_START_P1:
-Attack_IPV6_Treat 32;
-Write OREG, BDOS_ATTACK_RESULTS_L23_2_STR, TREG[TREG_BDOS_RES_OFF], BDOS_ATTACK_RESULT_SIZE, WR_LAST;
-Halt;
-
-
-// L4 Attacks - TCP, UDP, ICMP, IGMP
-
-public ATTACK_TCP_START_P0:
-Attack_TCP_Treat 0;
-Write OREG, BDOS_ATTACK_RESULTS_L4_STR, TREG[TREG_BDOS_RES_OFF], BDOS_ATTACK_RESULT_SIZE, WR_LAST;
-Halt;
-
-public ATTACK_TCP_START_P1:
-Attack_TCP_Treat 32;
-Write OREG, BDOS_ATTACK_RESULTS_L4_STR, TREG[TREG_BDOS_RES_OFF], BDOS_ATTACK_RESULT_SIZE, WR_LAST;
-Halt;
-
-public ATTACK_UDP_START_P0:
-Attack_UDP_Treat 0;
-Write OREG, BDOS_ATTACK_RESULTS_L4_STR, TREG[TREG_BDOS_RES_OFF], BDOS_ATTACK_RESULT_SIZE, WR_LAST;
-Halt;
-
-public ATTACK_UDP_START_P1:
-Attack_UDP_Treat 32;
-Write OREG, BDOS_ATTACK_RESULTS_L4_STR, TREG[TREG_BDOS_RES_OFF], BDOS_ATTACK_RESULT_SIZE, WR_LAST;
-Halt;
-
-public ATTACK_ICMP_START_P0:
-Attack_ICMP_Treat 0;
-Write OREG, BDOS_ATTACK_RESULTS_L4_STR, TREG[TREG_BDOS_RES_OFF], BDOS_ATTACK_RESULT_SIZE, WR_LAST;
-Halt;
-
-public ATTACK_ICMP_START_P1:
-Attack_ICMP_Treat 32;
-Write OREG, BDOS_ATTACK_RESULTS_L4_STR, TREG[TREG_BDOS_RES_OFF], BDOS_ATTACK_RESULT_SIZE, WR_LAST;
-Halt;
-
-public ATTACK_IGMP_START_P0:
-Attack_IGMP_Treat 0;
-Write OREG, BDOS_ATTACK_RESULTS_L4_STR, TREG[TREG_BDOS_RES_OFF], BDOS_ATTACK_RESULT_SIZE, WR_LAST;
-Halt;
-
-public ATTACK_IGMP_START_P1:
-Attack_IGMP_Treat 32;
-Write OREG, BDOS_ATTACK_RESULTS_L4_STR, TREG[TREG_BDOS_RES_OFF], BDOS_ATTACK_RESULT_SIZE, WR_LAST;
-Halt;
+EMPTY:
+jcond;
+jmp MAIN;
 
 #define CORE2IP_OFF_TREG  8
 
@@ -902,4 +621,6 @@ public CORE_DISTR_LAB:
 
    Write CTX CTX_LINE_CORE2IP_DISTRIBUTION, CORE2IP_STR, TREG[CORE2IP_OFF_TREG], (CORE2IP_RESULT_SIZE);
 
-   Halt;
+   Halt;       
+ 
+

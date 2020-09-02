@@ -355,8 +355,8 @@ RESULT_IS_READY_IN_CAMO_LAB:
 
    /* TCAM 64 MATCH ! */
    // read both "has RX copy" bit and "switch VLAN" bit to byCtrlMsgPrs2
-   MovBits byCtrlMsgPrs2.BIT[MSG_CTRL_TOPPRS_2_HAS_RX_COPY_BIT], CAMO.bit[FFT_VIF_DATA_HAS_RX_COPY_PORT_OFF], 1;
-   MovBits byCtrlMsgPrs2.BIT[MSG_CTRL_TOPPRS_2_SLT_VLAN_BIT], CAMO.bit[FFT_VIF_DATA_SWITCH_VLAN_OFF], 1;
+   //MovBits byCtrlMsgPrs2.BIT[MSG_CTRL_TOPPRS_2_HAS_RX_COPY_BIT], CAMO.bit[FFT_VIF_DATA_HAS_RX_COPY_PORT_OFF], 1;
+   //MovBits byCtrlMsgPrs2.BIT[MSG_CTRL_TOPPRS_2_SLT_VLAN_BIT], CAMO.bit[FFT_VIF_DATA_SWITCH_VLAN_OFF], 1;
 
      //clear routing mode selectin for SSL port type
    If (CAMO.bit[SSL_PORT_DET]) MovBits bitPRS_isRoutingMode , 0 ,1 ;
@@ -378,11 +378,6 @@ PER_VIF_COUNTING_LAB:
         IC_CNTRL_1_DMAC_NO_MATCH_OFF configuration (in this case ENC_PRI is overwritten to fit DMAC_NO_MATCH handling) */
 /* Increment the relevant vif input counter by 1 */
 
-Mov ALU, PERVIF_IN_BASE, 4;	// base counter for VIF counters
-MovBits uqTmpReg2.bit[1], CAMO.bit[FFT_VIF_DATA_VIFID_OFF], FFT_VIF_DATA_VIFID_SIZE;
-   vardef regtype uqPRS_IPv4DIP uqTmpCtxReg4;
-   mov $uqPRS_IPv4DIP, 0, 4; // Clear uqPRS_IPv4DIP. it will be set with IPv4.DIP in case of IPv4 frame. in case that it's value is all zeros, this means that the frame is not of IPv4 type. used for radwareGRETunnel functionality (to identify IPv4.GRE.MY_IP frame).
-Add uqTmpReg2, uqTmpReg2, ALU, 4;
 
 /* save global configuration (dsecoded) in message */
 //PutKey MSG_GLOB_CONFIG_OFF(HW_KBS), byGlobConfReg, 1;// 0x1 - DROP, 0x2 - CONT, 0x4 - BYPASS_TO_NW, 0x8 - TO_CPU
@@ -395,6 +390,7 @@ Add uqTmpReg2, uqTmpReg2, ALU, 4;
 
    /* Populate ENC_PRI with global setting mode - Global (Send TO CPU / BYPASS to NW / Continue parsing frame / DROP) */
    //MovBits ENC_PRI.bit[9], byGlobConfReg.bit[0], 7;
+   //Mov ALU ,  uqGcCtrlReg0.
    Putkey UNF_PROT_POLICY_PHASE_OFF(COM_KBS), uqGcCtrlReg0.byte[2], CMP_POLICY_PHASE_SIZE;  
 
    Mov ALU , PA_CHECK_ONLY , 4;
@@ -410,21 +406,26 @@ MovBits ALU.bit[12], sHWDall_bitNoTag, 1, RESET;
 MovBits ALU, sHWD_uxTag1Vid, 12;
 #endif
 */
-   PutKey MSG_SRC_PORT_OFF(HW_KBS), bySrcPortReg, 1; // ##TODO_OPTIMIZE - check option to move this line to after the JMUL. also check if this can be repleaced with the source port from the HW_MSG (not the lookup result of the VIF table, as implemented today). see comment near the definition of the constant MSG_SRC_PORT_OFF.
+PutKey MSG_SRC_PORT_OFF(HW_KBS), bySrcPortReg, 1; // ##TODO_OPTIMIZE - check option to move this line to after the JMUL. also check if this can be repleaced with the source port from the HW_MSG (not the lookup result of the VIF table, as implemented today). see comment near the definition of the constant MSG_SRC_PORT_OFF.
 // For port that has "SLT VLAN" attribute, there is no need to run packet anomalies, and any of the security features in TOP resolve.
 // Instead, packets from this port will be treated as if the global processing mode is bypass (host or network)
 // TODO: this part of code is here because hash calculations are required (in PARSE_AND_CALC_HASH).
 //       In case there is no need for the hash value, move the below lines to be performed in the FRAME_CONT_ACTION_LAB label, before
 //       running parsing code.
-movbits byTempCondByte1.BIT[MSG_CTRL_TOPPRS_2_SLT_VLAN_BIT], bitPRS_isSltVlanMode, 1;
+//movbits byTempCondByte1.BIT[MSG_CTRL_TOPPRS_2_SLT_VLAN_BIT], bitPRS_isSltVlanMode, 1;
 
 PutKey UNF_PROT_VLAN_OFF (COM_KBS), $usrVlanTag , 2;
 
-If (byTempCondByte1.BIT[MSG_CTRL_TOPPRS_2_SLT_VLAN_BIT]) Jmp PRS_SLT_VLAN_LAB;
-    If (CAMO.bit [SSL_PORT_DET]) Mov uqGcCtrlReg0 , ALU  , 4;
-    If (CAMO.bit [SSL_PORT_DET]) Mov byFrameActionOverrideReg , FRAME_BYPASS_HOST  , 1;
+//If (byTempCondByte1.BIT[MSG_CTRL_TOPPRS_2_SLT_VLAN_BIT]) Jmp PRS_SLT_VLAN_LAB;
+If (CAMO.bit [SSL_PORT_DET]) Mov uqGcCtrlReg0 , ALU  , 4;
+If (CAMO.bit [SSL_PORT_DET]) Mov byFrameActionOverrideReg , FRAME_BYPASS_HOST  , 1;
 
-PutHdr  HREG[ 1 ], COMP_NON_SYN_PROT_LKP;
+
+Mov ALU,0,4; 
+Mov4Bits ALU.bits[4,3,2,1] , uqGcCtrlReg0.bits[GC_CNTRL_0_ALIST_NONE_EMPTY_BIT,GC_CNTRL_0_POLICY_NON_EMPTY_BIT,GC_CNTRL_0_PROT_DST_NONE_EMPTY_BIT,GC_CNTRL_0_BDOS_EMPTY_SIG_BIT];
+PutHdr  HREG[ 1 ], MAIN_LKP;
+PutKey UNF_TASK_CNTR(COM_KBS), ALU , 1; 
+ 
    // following instructions are executed whether the jump is taken or not.
    // They are taken meaningfull only in the common path where there is no bypass feature
 
@@ -677,7 +678,7 @@ Nop;
 
 
 xor ALU, tmp_FLAGS_REG, TCP_RST_ACK_FLAGS, 4, MASK_0000001F, MASK_SRC1;
-
+nop;
 jnz DBG_CONTINUE1;
      //check if tcp frame , if no skip the rest
     if(!uqCondReg.bit[25]) jmp  END_OF_SYN;
@@ -1209,7 +1210,7 @@ PutKey  UNF_PROT_PHASE_OFF(COM_KBS), ALU, 1;
 
 SYN_CREATED_GLOBAL_KEY:
 
-Add COM_KBS, COM_KBS, CMP_SYN_PROT_DEST_KMEM_SIZE, 2;      
+Add COM_KBS, COM_KBS, MAIN_KMEM_SIZE, 2;      
 
 
 // Support OOS feature after Policy/BDOS
@@ -1312,16 +1313,6 @@ jmp SYN_PROT_LAB, NOP_1;
    Putkey MSG_L4_VALIDATION_BITS_OFF(HW_KBS), 0, 2;
  
 
-TCP_OOS_DISABLED:
-// In case TCP_OOS is disabled, perform configured default action (Drop or Continue)
-if (uqGcCtrlReg0.bit[GC_CNTRL_0_TCP_OOS_DEFAULT_ACTION_BIT]) jmp PRS_DONE_LAB, NOP_2;
-jmp GLOB_CONF_DROP_LAB, NOP_2;
-
-/*
-SYN_DEFAULT_ACTION:
-if (!uqGcCtrlReg0.BIT[GC_CNTRL_0_SYN_DEFAULT_ACTION_BITS]) jmp GLOB_CONF_DROP_LAB, NOP_2;  
-jmp SKIP_SYN_PROT, NOP_2;
-*/
       
 //control error treatment 
 indirect ERROR_HANDLING:
@@ -1567,7 +1558,7 @@ Nop;
 If (CAMO.bit[17]) jmp XPY_XPY_LAB , NOP_2;
 
 
-L131/*BLJAD_EBANA_NAXYI*/:
+L131:
 //clear policy search request l2 type none unicast  detected
 If (bitPRS_isRoutingMode) MovBits uqGcCtrlReg0.bit[GC_CNTRL_0_POLICY_NON_EMPTY_BIT] , 0 , 1;
 
@@ -1632,10 +1623,29 @@ Mov uxTmpReg1, ENC_PRO, 2;
        
 CHK_FAIL_LAB:
 
+//if ENC_PRI bit 14 , 13 is none zero it's mean frag ipv4 detected , let's feel bdos 
+//frag fields
+Mov2Bits byTempCondByte1.bits[0,0] , ENC_PRI.bits[14,13]; 
+MovBits ALU , sIpv4ProtDec_CAMO_bitsIpFlags , 3 , RESET;   
+
+if (!byTempCondByte1.bit[0]) jmp CONT_ANOMALY;
+//fill l4 fragment bdos fields
+    Get  ALU.byte[2] , IP_FLAGS_OFF(FMEM_BASE), 2, SWAP;  
+    //clear ip flag 
+    MovBits ALU.byte[3].bit[5] , 0 , 3;
+
+nop;
+PutKey CMP_BDOS_L23_FRGMNT_OFF(COM_KBS),     ALU.byte[2], CMP_BDOS_L23_FRGMNT_SIZE;
+PutKey CMP_BDOS_L23_FRGMNT_FLG_OFF(COM_KBS), ALU.byte[0], CMP_BDOS_L23_FRGMNT_FLG_SIZE;   // size is '1'     
+
+CONT_ANOMALY:     
+
 //decode the action for this anomaly (0:drop, 1:cont,2:bypass,3:to-cpu)
 decode  ALU, bytmp1, 1, MASK_00000003, MASK_SRC1;
+
 Mov     uqTmpReg4, 0, 4;
 MovBits bytmp3, ENC_PRI.bit[13], 3;  // Save ENC_PRI register bits
+
 MovBits ENC_PRI.bit[13], ALU, 3;//don't move bit 3, if other bits are 0, it must be 1, and will be handelled in Jmul fallback
 Add     uqTmpReg4, uxTmpReg1, bytmp1, 2, MASK_00000003, MASK_SRC2;
 

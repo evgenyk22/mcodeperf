@@ -19,7 +19,8 @@
 //tcp dest port bgp type
 #define ROUTING_BGP_TCP_TYPE     179
 
-
+#define UDP_HLEN_OFF          4;
+#define UDP_CHKSUM_OFF        6; 
 
 
 /****************************************************************
@@ -446,6 +447,11 @@ IPv4_INC_CHEKSUM:
 //        IPv4 TTL Check
 ///////////////////////////////////
 //IPv4_HDR_TTL_LAB:
+
+Copy CMP_BDOS_L23_TTL_OFF(COM_KBS),     IP_TTL_OFF(FMEM_BASE),  CMP_BDOS_L23_TTL_SIZE;           // size is '1'. no need for swap 
+Copy CMP_BDOS_L23_TOS_OFF(COM_KBS),     IP_TOS_OFF(FMEM_BASE),  CMP_BDOS_L23_TOS_SIZE;
+Copy CMP_BDOS_L23_ID_NUM_OFF(COM_KBS),  IP_ID_OFF(FMEM_BASE),   CMP_BDOS_L23_ID_NUM_SIZE,  SWAP; // Id is 2 
+Copy CMP_BDOS_L23_L3_SIZE_OFF(COM_KBS), IP_LEN_OFF(FMEM_BASE),  CMP_BDOS_L23_L3_SIZE_SIZE, SWAP; // Size is 2 
 
 // Check if TTL == 0
 Sub ALU, sIpv4ProtDec_HWD4_byNewTtl, 0xff, 1;    // sIpv4ProtDec_HWD4_byNewTtl - contains the hop limit - 1
@@ -1032,8 +1038,10 @@ Sub ALU , uqTmpReg1 , 0  , 2;
 Mov uxTmp2CtxReg2 , UDP_BASE_SIZE, 2  ;
 
 Mov PA_CASE , IC_CNTRL_1_UDP_ZCHKSUM , 2 , THROW( FLAGS.BIT[F_ZR ] ); 
- Copy CMP_BDOS_L4_SRC_PORT_OFF(COM_KBS), UDP_SPRT_OFF(FMEM_BASE),  CMP_BDOS_L4_SRC_PORT_SIZE, SWAP;
- Copy CMP_BDOS_L4_DST_PORT_OFF(COM_KBS), UDP_DPRT_OFF(FMEM_BASE),  CMP_BDOS_L4_DST_PORT_SIZE, SWAP;
+   copy  CMP_BDOS_L4_CHECKSUM_OFF (COM_KBS),   UDP_CHKSUM_OFF(FMEM_BASE), CMP_BDOS_L4_CHECKSUM_SIZE, SWAP;  
+   nop;
+ //Copy CMP_BDOS_L4_SRC_PORT_OFF(COM_KBS), UDP_SPRT_OFF(FMEM_BASE),  CMP_BDOS_L4_SRC_PORT_SIZE, SWAP;
+ //Copy CMP_BDOS_L4_DST_PORT_OFF(COM_KBS), UDP_DPRT_OFF(FMEM_BASE),  CMP_BDOS_L4_DST_PORT_SIZE, SWAP;
 
 UDP_ZERO_CHKSUM:
 
@@ -1171,13 +1179,13 @@ SKIP_TCP_HLEN_DET:
 Copy CMP_BDOS_L4_CHECKSUM_OFF(COM_KBS), TCP_CHK_OFF(FMEM_BASE),   CMP_BDOS_L4_CHECKSUM_SIZE, SWAP;
 TCP_HLEN_CONT:
 Mov ALU , HWD_REG4 , 2;
-Copy CMP_BDOS_L4_SRC_PORT_OFF(COM_KBS), UDP_SPRT_OFF(FMEM_BASE),  CMP_BDOS_L4_SRC_PORT_SIZE, SWAP;
+//Copy CMP_BDOS_L4_SRC_PORT_OFF(COM_KBS), UDP_SPRT_OFF(FMEM_BASE),  CMP_BDOS_L4_SRC_PORT_SIZE, SWAP;
 CmpSet ALU.byte[3] , ALU , 0 , RESULT 1 ;
-Copy CMP_BDOS_L4_DST_PORT_OFF(COM_KBS), UDP_DPRT_OFF(FMEM_BASE),  CMP_BDOS_L4_DST_PORT_SIZE, SWAP;
+//Copy CMP_BDOS_L4_DST_PORT_OFF(COM_KBS), UDP_DPRT_OFF(FMEM_BASE),  CMP_BDOS_L4_DST_PORT_SIZE, SWAP;
 Mov ALU , HWD_REG4.byte[2] , 2; 
 CmpSet ALU.byte[3] , ALU , 0 ,  RESULT 1;
-
-PutHdr  HREG[ 1 ], COMP_SYN_PROT_LKP; // Only in TCP packet: perform syn prot search. 
+nop;
+//PutHdr  HREG[ 1 ], COMP_SYN_PROT_LKP; // Only in TCP packet: perform syn prot search. 
 
 MovBits CAMO.byte[0] , ALU.byte[3] , 1;
 
@@ -1196,8 +1204,9 @@ If ( !CAMO.bit[13] ) jmp   L4_PAYLOAD_LEN_CHECK_LAB;
 
 jmp GTP_CHECK_LAB;
    // Mov uqFramePrsReg.byte[1] ,  HWD_REG5 , 1;
-    MovBits uqFramePrsReg.byte[1], HWD_REG5, 6; 
-    Nop;
+    MovBits uqFramePrsReg.byte[1], HWD_REG5, 6;
+    nop;
+    //Nop;
 ///////////////////////////////////
 //   Manual Parse of L4 Protocol
 ///////////////////////////////////
