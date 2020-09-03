@@ -281,7 +281,7 @@ LDCAM BCAM32[IPv6_SUBHEAD_ID_GRP], PARSE_EXT_HEADER_AUTHENTICATION, 4;
 #define uqTunInReg               uqTmpReg0;
 #define uxGreTunTmpOffReg        uqTmpReg4;
 
-LdThrowLabel GLOB_ANOMALY_LAB; 
+
 
 #endif; // of #ifndef _XAD_PRS_PARSER_H_
 

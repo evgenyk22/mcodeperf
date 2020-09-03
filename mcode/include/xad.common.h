@@ -1132,8 +1132,8 @@
 //2 -  policy id
 #define L4_KEY_OFFSET                          ( 64 )
 // L4 fields offsets
-//#define CMP_BDOS_L4_SRC_PORT_OFF               (0 + L4_KEY_OFFSET )  // Size 2 bytes
-//#define CMP_BDOS_L4_DST_PORT_OFF               (2 + L4_KEY_OFFSET )   // Size 2 bytes
+#define CMP_BDOS_L4_SRC_PORT_OFF               UNF_PROT_SPORT_OFF_KMEM   // Size 2 bytes
+#define CMP_BDOS_L4_DST_PORT_OFF               UNF_PROT_DPORT_OFF   // Size 2 bytes
 
 //#define CMP_BDOS_L7_DNS_FLAGS_OFF              18  // Size 2 bytes
 //#define CMP_BDOS_L7_DNS_TRANSACTION_ID_OFF     20  // Size 2 bytes
@@ -1154,7 +1154,7 @@
 
 
 // L2 fields sizes
-//#define CMP_BDOS_L23_VLAN_SIZE                 2
+#define CMP_BDOS_L23_VLAN_SIZE                 2
 #define CMP_BDOS_L23_PACKET_SIZE_SIZE          2
 
 #define CMP_BDOS_KMEM_SIZE                    96  // 48 L3 BDOS size + 26 bytes +6 bytes L4 padded to the closest multiple of 16 bytes
@@ -1219,9 +1219,6 @@
 
 // BDOS:
 
-// Offset in TREG where we write temporary key type value of lookups in BDOS structures 14-23
-#define TREG_TEMP_BDOS_KEY_TYP_OFF     45 // Since IPv6 compound key is larger then IPv4 key
-#define TREG_TEMP_BDOS_KEY_TYP_SIZE    16
 
 // Offset in TREG where we write temporary results of lookups in BDOS structures 14-23
 #define TREG_TEMP_BDOS_LKP_RES_OFF     {TREG_BDOS_RES_OFF + 32} /*TREG_TEMP_BDOS_KEY_TYP_OFF*/ //(TREG_TEMP_BDOS_KEY_TYP_OFF + TREG_TEMP_BDOS_KEY_TYP_SIZE) // 48 + 16 = 64
@@ -1249,8 +1246,8 @@
 #define EQUAL_MASK                  0x2
 
 
-#define SAVED_1_CMP_BDOS_L23_L3_SIZE_IPV6_PROT_IP_VER  192
-#define SAVED_2_CMP_BDOS_L23_L3_SIZE_IPV6_PROT_IP_VER  64
+//#define SAVED_1_CMP_BDOS_L23_L3_SIZE_IPV6_PROT_IP_VER  192
+//#define SAVED_2_CMP_BDOS_L23_L3_SIZE_IPV6_PROT_IP_VER  64
 
 /*TREG_TIMER_COUNTER_OFF*/
 // Controlers definition:
@@ -1454,12 +1451,12 @@
 #define GC_CNTRL_0_PROT_DST_PHASE_BIT              18 // SYN Protection phase bit ('0' - phase 0, '1' - phase 1)
 #define GC_CNTRL_0_POLICY_NON_EMPTY_BIT            19 // At least one policy is defined
 #define GC_CNTRL_0_POLICY_ACTIVE_BIT               20 // Policy phase set to use, GuyE: Not needed since we are working with 1 phase
-#define GC_CNTRL_0_BDOS_ENABLE_BIT                 21 // BDOS filters are enabled
+#define GC_CNTRL_0_BDOS_ACTIVE_BIT                 21 // BDOS filters are enabled
 #define GC_CNTRL_0_GRE_TUN_CFG_BIT                 22 // enable GRE channel - to enable deeper packet inspection in case that frame has GRE header
 #define GC_CNTRL_0_PPS_POLICER_EN_BIT              23 // start limit the PPS traffic
 #define GC_CNTRL_0_L2TP_TUN_CFG_BIT                24 //                    - to enable deeper packet inspection in case that frame has LT2P header
 #define GC_CNTRL_0_BDOS_EMPTY_SIG_BIT              25 // BDOS signatures are empty
-#define GC_CNTRL_0_BDOS_ACTIVE_BIT                 26 // BDOS data set to use
+//#define GC_CNTRL_0_BDOS_ACTIVE_BIT                 26 // BDOS data set to use
 //#define GC_CNTRL_0_TCP_OOS_ENABLED_BIT             27 // TCP OOS is enabled
 #define GC_CNTRL_GLOB_TUNNEL_STATUS_BIT            27 // TCP OOS is enabled
 
@@ -1880,12 +1877,20 @@
 #define UNF_PROT_SPORT_OFF_KMEM          48 // size 2,  offset on KMEM, used for compound lookup in structure 63 (SYN_PROT_CONT_STR)
 #define UNF_L4_TYPE                      50 //protocol type for access list unified key
 
+// Offset in TREG where we write temporary key type value of lookups in BDOS structures 14-23
+#define TREG_TEMP_BDOS_KEY_TYP_OFF     96 // Since IPv6 compound key is larger then IPv4 key
+#define TREG_TEMP_BDOS_KEY_TYP_SIZE    16
+
 #define UNF_PROT_CONT_COOKIE_OFF_KMEM    52 // size 3,  offset on KMEM, used for compound lookup in structure 63 (SYN_PROT_CONT_STR)
 
 #define UNF_FRAG_L4_MASK                 55  // size 1 , unf bdos controller
 
-#define UNF_BDOS_PHASE                   56 // size 1
-#define UNF_TASK_CNTR                    57 // size 1
+#define UNF_POLICY_BDOS_CNG              56 //2 byte , controller + protocol encoding 
+
+#define UNF_TASK_CNTR                    58 // size 1
+
+
+
 //#define CMP_POLICY_BDOS_CFG_PHASE_OFF 42
 
 //#define GLOBAL_RTM_IN_TOP_MODIFY 1
@@ -1939,7 +1944,7 @@ IP_TOS_OFF                  1             ;
 #define CMP_BDOS_L4_TCP_SEQ_NUM_OFF    ( 4 + UNF_BDOS_L4_KEY_OFFSET )   // Size 4 bytes, TCP Fields
 #define CMP_BDOS_L4_TCP_FLAGS_OFF      ( 8 + UNF_BDOS_L4_KEY_OFFSET )  // Size 1 byte,  TCP Fields
 // L2 fields offsets
-//#define CMP_BDOS_L23_VLAN_OFF                  (11 + L4_KEY_OFFSET )  // Size 2 bytes
+#define CMP_BDOS_L23_VLAN_OFF          (UNF_PROT_VLAN_OFF + L4_KEY_OFFSET )  // Size 2 bytes
 #define CMP_BDOS_L23_PACKET_SIZE_OFF   ( 9 + UNF_BDOS_L4_KEY_OFFSET )  // Size 2 bytes
 // DNS numeric fields offsets
 #define  CMP_BDOS_L4_CNTRL_OFF         ( 11 + UNF_BDOS_L4_KEY_OFFSET )  // Size 4 bytes metadata will be replaced in TS
@@ -1954,10 +1959,11 @@ IP_TOS_OFF                  1             ;
 //#define CMP_BDOS_L23_IPV6_SIP_OFF              (16 + L3_KEY_OFFSET )   // Size 16 bytes
 
 // L3 Common fields offsets (shared with IPv4 key & IPv6 key)
-//#define L3_COMMON_FLD_L3_SIZE_OFFSET      0
-//#define L3_COMMON_FLD_IPV6_L4_PROT_OFFSET 2
-//#define L3_COMMON_FLD_IP_VER_OFFSET       3
-
+/*
+#define L3_COMMON_FLD_L3_SIZE_OFFSET      0
+#define L3_COMMON_FLD_IPV6_L4_PROT_OFFSET 2
+#define L3_COMMON_FLD_IP_VER_OFFSET       3
+*/
 //#define CMP_BDOS_L23_L3_SIZE_OFF               (45 + L3_COMMON_FLD_L3_SIZE_OFFSET + L3_KEY_OFFSET )  // Size 2 bytes
 
 //#define CMP_BDOS_L23_IPV6_L4_PROT_OFF             (45 + L3_COMMON_FLD_IPV6_L4_PROT_OFFSET + L3_KEY_OFFSET )  // Size 1 bytes

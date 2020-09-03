@@ -443,5 +443,15 @@ LdIcfdErrLabel ICFDQ_ERR_DROP_LAB_CONT;
 #define ENC_PRI_STORE  CTX_REG[13];
 #define PA_CASE        CTX_REG[12]; 
 
+
+//Global controller bits in Byte[0]
+#define GLOBAL_CTRLR0_IP_VERSION 7
+#define GLOBAL_CTRLR0_IP_VERSION_CLEAR_BIT 0x7F
+#define PER_POLICY_CTRLR_IP_VERSION 15  //bit count in CAMI 
+
+//Global controller bits in Byte[1]
+#define GLOBAL_CTRLR1_TCP_5FLAGS    0
+#define GLOBAL_CTRLR1_FRAG          6 
+
 #endif; // of #ifndef _XAD_PRS_H_
 

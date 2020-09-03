@@ -351,12 +351,30 @@ L_ROUTING_COMMON:
 #define TREG_TCAM_RESULT_OFF           96 /*{68+4}*/  // Size 4 bytes
 #define    TREG_TCAM_IDX_OFF           (TREG_TCAM_RESULT_OFF + 1) // Size 3 bytes
 #define    TREG_TCAM_IDX_UNF_OFF       (TREG_TCAM_RESULT_UNF_OFF + 1) // Size 3 bytes
+#define BDOS_POLICY_RES  224    /* E0 */
+//alias
+#define BDOS_POLICY_CNTR_OFF CMP_BDOS_L4_CNTRL_OFF
+#define BDOS_POLICY_RES_OFF      BDOS_POLICY_RES
+#define BDOS_LKSD_POLICY_RES_OFF BDOS_POLICY_RES_OFF
+#define BDOS_LKSD_BDOS_RES_OFF ( BDOS_LKSD_POLICY_RES_OFF +   32 - 10 ) ;
+
+
+#define BDOS_TREG_TMP    208    /* D0 */
+#define BDOS_TREG_BASE   128
+#define BDOS_L4_CNTR1 ( BDOS_POLICY_RES + 0x2e )
+#define BDOS_L4_INRES  0x5e
+#define BDOS_TEMP_AREA 0x60 // old policy result place , no need anymoore
+#define KEYS_SAVE_AREA1 176  //32 byte 0xB0
+
 
 Public MAIN_START:
 
 MAIN:
 // Put byte 2 of SYN_PROT_DEST_STR result in CondReg
 //WriteCond COND_REG, TREG[UNF_TASK_CNTR]; 
+
+
+Write TREG[KEYS_SAVE_AREA1] , POLICY_RES_CONF_STR ,  TREG [ 64 ] , 32;
 
 Jmul  TREG[UNF_TASK_CNTR],
       EMPTY,
@@ -371,10 +389,12 @@ Jmul  TREG[UNF_TASK_CNTR],
 //no more jobs , terminate
 //Write TREG[0] , TREG[0] , 0 , WR_LAST;
 
-
+/*
 Write  TREG[0], SYN_PROT_DEST_STR, 
       TREG[0], SYN_PROT_DEST_RES_SIZE,  
       WR_LAST; 
+*/
+Write OREG , POLICY_RES_CONF_STR , TREG[BDOS_POLICY_RES] , 32  ,  WR_LAST;
 
 
 Halt;
@@ -412,8 +432,8 @@ halt;
 POLICY:
 WriteCond COND_REG, TREG[UNF_PROT_POLICY_PHASE_OFF].bit[4], SET_MATCH_BIT;   
 JCond;                    
-JNoMatch POLICYP0;
-WriteIndreg POLICY_RES_CONF_STR_P1 ;
+JMatch POLICYP1;
+WriteIndreg POLICY_RES_CONF_STR_P0 ;
 
 LookupTCAM TREG[TREG_TCAM_RESULT_UNF_OFF], EXT_TCAM_STR, 
               TREG[UNF_PROT_VLAN_OFF     ],  19, // unified [ key vlan { 2 byte } + DIP {16 byte} + phys port { 1 byte } 
@@ -421,7 +441,7 @@ LookupTCAM TREG[TREG_TCAM_RESULT_UNF_OFF], EXT_TCAM_STR,
               PROFILE EXT_TCAM_LINE_NUM_POLICY_PHASE0 /*EXT_TCAM_LINE_NUM_POLICY_PHASE1*/, NO_WR_LAST;
 
 jmp  POLICYTCAM_END;
-POLICYP0:
+POLICYP1:
  
 WriteIndreg POLICY_RES_CONF_STR_P1 ;
 LookupTCAM TREG[TREG_TCAM_RESULT_UNF_OFF], EXT_TCAM_STR, 
@@ -448,7 +468,9 @@ Lookup TREG[ TREG_TCAM_RESULT_OFF ], IND_REG,
 		  TREG[ { TREG_TCAM_RESULT_OFF + 3 } ], 2 ,TREG[TREG_TCAM_IDX_OFF], 0,RES_SIZE 32 ,
         NO_WR_LAST; 
 
-Write OREG , POLICY_RES_CONF_STR , TREG[TREG_TCAM_RESULT_OFF] , 32  ,  NO_WR_LAST;
+
+Write TREG[BDOS_POLICY_RES] , POLICY_RES_CONF_STR , TREG[TREG_TCAM_RESULT_OFF] , 32  ,  NO_WR_LAST;
+
 
 jcond;
 jmp  MAIN;
@@ -472,9 +494,11 @@ POLICY_NO_MATCH:
 #define TREG_SYN_PROT_OFF        64;
 #define TREG_CONTENDER_OFF      (TREG_SYN_PROT_OFF + SYN_PROT_DEST_RES_SIZE);  // 64 + 16
 #define TREG_AUTH_OFF           (TREG_SYN_PROT_OFF + SYN_PROT_DEST_RES_SIZE);  // 64 + 16 
+#define POL_HW_OFF             2
+
 
 SYN:
-
+ 
 // Lookup in Int.TCAM to find a key for SYN Protection table
 Nop;
 Nop;
@@ -593,16 +617,132 @@ jcond;
 jmp MAIN;
 
 
+
 BDOS:
 
+    
+
+    //Write 
+    Write TREG[BDOS_POLICY_RES] , POLICY_RES_CONF_STR , TREG[TREG_TCAM_RESULT_OFF] , 32  ,  NO_WR_LAST;
+
+    MovImm TREG[ BDOS_TREG_TMP ] , 0 , 2;
+    MovBits TREG[ BDOS_TREG_TMP  ] ,  TREG[ UNF_POLICY_BDOS_CNG ] , 8;
+
+        //save fragment key somewhere
+     //MovBits TREG[POL_TMP1] , TREG[BDOS_L4_CNTR1] , 8;  Do I need it???
+        
+    //BDOS conf place UNF_PROT_POLICY_PHASE_OFF + 5 
+    MovBits TREG[UNF_PROT_POLICY_PHASE_OFF].bit[4] , TREG[UNF_PROT_POLICY_PHASE_OFF].bit[5] , 1;
+    WriteCond COND_REG, TREG[UNF_PROT_POLICY_PHASE_OFF].bit[4], SET_MATCH_BIT;   
+    JCond;                    
+    JNoMatch BDOSP0;
+
+     //bdos local configuration result
+    Lookup TREG[BDOS_TREG_TMP ], DDOS_CTRL_STR_PHASE1,
+	  	     TREG[ { BDOS_POLICY_RES + 2 } ], 2, TREG[ BDOS_TREG_TMP ], 2 , //bdos cntr 
+           RES_SIZE 16 , NO_WR_LAST;
+
+    jmp BDOS_CNFG;
+
+BDOSP0:
+
+     //bdos local configuration result
+    Lookup TREG[BDOS_TREG_TMP ], DDOS_CTRL_STR_PHASE0,
+	  	     TREG[ { BDOS_POLICY_RES + 2 } ], 2, TREG[ BDOS_TREG_TMP ], 2 , //bdos cntr 
+           RES_SIZE 16 , NO_WR_LAST;
+
+BDOS_CNFG:
+
+    //check bdos hit/miss result ( skip bdos if no match ) 
+
+    WriteCond COND_REG, TREG[BDOS_TREG_TMP].bit[4], SET_MATCH_BIT;
+    JCond;
+    JNoMatch LKSD_BDOS_NO_MATCH;
+    
+    Write TREG [TREG_SYN_PROT_OFF ] ,POLICY_RES_CONF_STR , TREG[KEYS_SAVE_AREA1]  , 16;
+
+    Write TREG [ { TREG_SYN_PROT_OFF + 16 } ] ,POLICY_RES_CONF_STR , TREG[ { KEYS_SAVE_AREA1 + 16 } ]  , 16; 
+          
+    //copy bdos result to policy placeholder
+    write TREG[ { BDOS_POLICY_RES + 32 - 10 } ] , 0 , TREG[ BDOS_TREG_TMP ] , 10 ;
+
+    write TREG[ { BDOS_POLICY_RES + 32 - 9 } ] , 0 ,  TREG[ { BDOS_POLICY_RES + 10 } ] , 1 ;
+    
+    //zero policy placeholder , it will be used for BDOS result 
+    LookUp TREG[ TREG_BDOS_RES_OFF ] , DNS_ZERO_RES_STRUCT , TREG[ DNS_SUMMARY_RESULT_OFF ] , 1 ,TREG[0], 0  , RES_SIZE 32, KEEP_PREV_CTRL_BITS , NO_WR_LAST;
+   //prepare place for sliding window , bdos always src1 zero bytes  src2 key size
+    write  TREG[TREG_TEMP_BDOS_KEY_TYP_OFF], 0, TREG[ { TREG_BDOS_RES_OFF + 1 } ] , 16 , KEEP_PREV_CTRL_BITS , NO_WR_LAST;
+
+    // Prepare first part of the key - policy id
+    Write TREG[ { TREG_TEMP_BDOS_KEY_TYP_OFF + 1 } ],0 , TREG[ { BDOS_LKSD_POLICY_RES_OFF +  POL_HW_OFF } ] , 2 , KEEP_PREV_CTRL_BITS , NO_WR_LAST;
+ 
+     
+    JMul  TREG[ { UNF_POLICY_BDOS_CNG + 1 } ]  , TCP_BDOS ,UDP_BDOS , ICMP_BDOS , IGMP_BDOS , OTHER_L4_PROTO_BDOS,OTHER_L4_PROTO_BDOS,OTHER_L4_PROTO_BDOS;
+
+
+OTHER_L4_PROTO_BDOS: //also fallback 
 
 
 
+IGMP_BDOS:
+    jcond;
+    jmp MAIN;
+
+
+ICMP_BDOS:
+
+    jcond;
+    jmp MAIN;
+
+
+TCP_BDOS:    
+
+    Attack_TCP_Treat;
+    jcond;
+    jmp BDOS_L3_START;
+    
+
+UDP_BDOS:
+
+    jcond;
+    jmp MAIN;
+
+
+BDOS_L3_START:
+
+//zero policy placeholder , it will be used for BDOS result 
+LookUp TREG[ TREG_BDOS_RES_OFF ] , DNS_ZERO_RES_STRUCT , TREG[ { TREG_TEMP_BDOS_KEY_TYP_OFF + 1} ] , 1 ,TREG[0], 0  , RES_SIZE 32, KEEP_PREV_CTRL_BITS , NO_WR_LAST;
+
+//here I need to destroy part of L4 key to support TREG 
+
+
+
+//set 0 - IPv4 1 -IPv6 ( pay attention , this address was already reused  , therefore I'd use copy of it )
+MovBits TREG[  UNF_PROT_POLICY_PHASE_OFF ].bit[4] ,  TREG[  UNF_PROT_POLICY_PHASE_OFF ].bit[7] , 1;
+WriteCond COND_REG , TREG[  UNF_PROT_POLICY_PHASE_OFF ].bit[4] , SET_MATCH_BIT;
+jcond;
+jmatch BDOS_IPV6; 
+
+Attack_IPV4_Treat;   
+
+
+BDOS_IPV6:
+Attack_IPV6_Treat;
+
+jcond;
+jmp MAIN;
+
+LKSD_BDOS_NO_MATCH:
+
+    MovImm TREG[BDOS_POLICY_RES], 0x1, 4;  
+    Write OREG ,  POLICY_RES_CONF_STR  , TREG[BDOS_POLICY_RES] , 4 , NO_WR_LAST;
 
    
 EMPTY:
 jcond;
 jmp MAIN;
+
+
 
 #define CORE2IP_OFF_TREG  8
 

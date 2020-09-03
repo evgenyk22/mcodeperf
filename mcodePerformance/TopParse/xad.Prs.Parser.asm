@@ -14,6 +14,7 @@
 #include "xad.Prs.Parser.h"
 
 
+
 //6 byte from start of Ipv4 header
 #define IPv4_FRAGMENT_OFFSET     6;
 //tcp dest port bgp type
@@ -1767,3 +1768,221 @@ Return;
     PutKey MSG_GRE_USR_OFF(HW_KBS), uxGreTunTmpOffReg, 2;
     Nop; 
 
+
+
+
+CHECK_FAIL_L2:
+
+If (!bitPRS_isRoutingMode)  jmp L131 , NOP_2;
+
+/* Validate broadcast and Multicast only and L2 control */
+Mov3Bits CAMO.bits[17,17,17] , sHWD9.bits[0,1,2];
+Nop;
+Nop;
+If (CAMO.bit[17]) jmp XPY_XPY_LAB , NOP_2;
+
+
+L131:
+//clear policy search request l2 type none unicast  detected
+If (bitPRS_isRoutingMode) MovBits uqGcCtrlReg0.bit[GC_CNTRL_0_POLICY_NON_EMPTY_BIT] , 0 , 1;
+
+Mov IND_REG0, {15 << 5}, 2;             // Start with CTX_REG[15]
+
+//BPDU_MCAST , MCAST , BCAST , L2_NONE_ETH , TEST_TUNNEL_AWARE_LAB , TEST_TUNNEL_AWARE_LAB , TEST_TUNNEL_AWARE_LAB;
+
+MovMul PARSING_DONE_LAB , TEST_TUNNEL_AWARE_LAB , PARSING_DONE_LAB;
+Mov PC_STACK , ENC_PRO , 2;
+
+If (bitPRS_isRoutingMode)   Mov PC_STACK , PARSING_DONE_LAB , 2;
+
+
+MovMul IC_CNTRL_0_L2_BROADCAST_OFF , IC_CNTRL_0_L2_BROADCAST_OFF  ,IC_CNTRL_0_L2_FORMAT_OFF ;
+MovBits IND_REG0.bit[0] , ENC_PRO.bit[0] , 5 ;
+MovMul  IS_L2_BRD_DRP , IS_L2_BRD_DRP , IS_UN_L2_DRP;
+
+jmp  CHK_FAIL_LAB;
+    MovBits bytmp1.BIT[0], CTX_REG[IND_REG0] , 2 , RESET;
+    Mov uxTmpReg1, ENC_PRO, 2;
+
+GLOB_ANOMALY_LAB:
+//#define IC_CNTRL_1_TCP_FLAG             0x200 
+//save ENC_PRI reg
+Mov ENC_PRI_STORE , ENC_PRI , 2; 
+MovBits ENC_PRI.bit[1] , PA_CASE.bit[1] , 15;
+ 
+ 
+Mov IND_REG0, {15 << 5}, 2;             // Start with CTX_REG[15]
+
+
+//actReg0 PA_FLAGS_CONT
+MovMul IPv6_INC_PKTHDRLEN , FRAG_CONT , IPv4_FRAG ,L4_PAYLOAD_LEN_CHECK_LAB,
+       UDP_INC_HLEN , UDP_ZERO_CHKSUM ,PA_FLAGS_CONT , TCP_HLEN_CONT , 
+       L4_PAYLOAD_LEN_CHECK_LAB  ,TTL_CONT  ,IPv4_INCHLEN , IPv4_INC_CHEKSUM ,
+       PARSING_DONE_LAB, IPV6_FIRST_FRAG , HOP_LIMIT;
+       
+Mov PC_STACK , ENC_PRO , 2;
+
+//select indreg offset
+MovMul IC_CNTRL_0_IPv4_INC_PKTHDRLEN_OFF , IC_CNTRL_0_FRAG_OFF , IC_CNTRL_0_FRAG_OFF ,IC_CNTRL_1_SCTP_HLEN_OFF,
+       IC_CNTRL_1_UDP_INC_HLEN_OFF , IC_CNTRL_1_UDP_ZCHKSUM_OFF ,IC_CNTRL_1_TCP_FLAG_OFF , IC_CNTRL_1_TCP_HLEN_OFF , 
+       IC_CNTRL_1_UNK_L4_OFF ,IC_CNTRL_0_INC_TTL_OFF  ,IC_CNTRL_0_IPv4_INC_PKTHDRLEN_OFF , IC_CNTRL_0_IPv4_INC_CHEKSUM_OFF ,
+       IC_CNTRL_0_L3_UNK_OFF, IC_CNTRL_0_IPv6_FRAG_OFF , IC_CNTRL_0_IPv6_HLIM_OFF;
+
+mov bytmp1, 0, 1;
+MovBits IND_REG0.bit[0] , ENC_PRO.bit[0] , 5 ;
+
+//select counter offset
+MovMul IS_IP4_HE_DRP , IS_IP4_FRG_DRP , IS_IP4_FRG_DRP ,IS_SCTP_HLEN_DRP,
+       IS_UDP_HE_DRP , IS_UDP_CZ_DRP ,IS_TCP_FL_DRP , IS_TCP_HE_DRP , 
+       IS_UN_L4_DRP ,IS_IP4_TTL_DRP  ,IS_IP4_HE_DRP , IS_IP4_CK_DRP ,
+       IS_UN_L3_DRP, IS_IP6_FRG_DRP , IS_IP6_HOP_DRP;
+
+mov bytmp3, 0, 1;
+MovBits bytmp1.BIT[0], CTX_REG[IND_REG0] , 2;
+Mov uxTmpReg1, ENC_PRO, 2;
+
+///////////////////////////////////
+//   Packet Anomalies Failed
+///////////////////////////////////
+       
+CHK_FAIL_LAB:
+
+//if ENC_PRI bit 14 , 13 is none zero it's mean frag ipv4 detected , let's feel bdos 
+//frag fields
+Mov2Bits byTempCondByte1.bits[0,0] , ENC_PRI.bits[14,13]; 
+MovBits ALU , sIpv4ProtDec_CAMO_bitsIpFlags , 3 , RESET;   
+
+if (!byTempCondByte1.bit[0]) jmp CONT_ANOMALY;
+//fill l4 fragment bdos fields
+    Get  ALU.byte[2] , IP_FLAGS_OFF(FMEM_BASE), 2, SWAP;  
+    //clear ip flag 
+    MovBits ALU.byte[3].bit[5] , 0 , 3;
+
+nop;
+PutKey CMP_BDOS_L23_FRGMNT_OFF(COM_KBS),     ALU.byte[2], CMP_BDOS_L23_FRGMNT_SIZE;
+PutKey CMP_BDOS_L23_FRGMNT_FLG_OFF(COM_KBS), ALU.byte[0], CMP_BDOS_L23_FRGMNT_FLG_SIZE;   // size is '1'     
+
+CONT_ANOMALY:     
+
+//decode the action for this anomaly (0:drop, 1:cont,2:bypass,3:to-cpu)
+decode  ALU, bytmp1, 1, MASK_00000003, MASK_SRC1;
+
+Mov     uqTmpReg4, 0, 4;
+MovBits bytmp3, ENC_PRI.bit[13], 3;  // Save ENC_PRI register bits
+
+MovBits ENC_PRI.bit[13], ALU, 3;//don't move bit 3, if other bits are 0, it must be 1, and will be handelled in Jmul fallback
+Add     uqTmpReg4, uxTmpReg1, bytmp1, 2, MASK_00000003, MASK_SRC2;
+
+Jmul PA_NET_BYPASS,       //Bypass
+     NEXT_CHK_LAB,        //Continue
+     PA_DRP_LAB, NO_NOP;   //Drop
+   Mov uqTmpCtxReg1, IMM_CHK_SAM_TB, 4;//prepare token bucket address   
+   And ALU, uqFramePrsReg, {1 << JUMBO_PCKT_STATUS_OFF}, 1;// Check whether packet is jumbo
+
+
+LAND_IPLOCAL_L4ZERO:
+
+Mov ENC_PRI_STORE , ENC_PRI , 2; 
+MovBits ENC_PRI.bit[13] , PA_CASE.bit[13] , 3;
+Mov IND_REG0, {15 << 5}, 2;
+//-- no need do it mannually 
+//MovMul PARSING_DONE_LAB , PARSING_DONE_LAB , LAND_CONT;    
+
+//Mov PC_STACK , ENC_PRO , 2;      
+
+MovMul IC_CNTRL_1_L4ZERO_PORT_OFF, IC_CNTRL_1_LOCALHOST_OFF ,IC_CNTRL_1_LAND_ATTACK_OFF ;
+mov bytmp1, 0, 1;
+MovBits IND_REG0.bit[0] , ENC_PRO.bit[0] , 5 ;
+MovMul  IS_L4PRTZ_CK_DRP ,IS_L3_LOCAL_DRP, IS_L3_LAND_DRP ;     
+
+mov bytmp3, 0, 1;
+jmp  CHK_FAIL_LAB;
+    MovBits bytmp1.BIT[0], CTX_REG[IND_REG0] , 2;
+    Mov uxTmpReg1, ENC_PRO, 2;
+
+
+
+////////////////////////////////////////////////////////////
+//  Packet Anomalies Failure - Bypass / Drop / Cont Handling
+////////////////////////////////////////////////////////////
+
+indirect PA_DRP_LAB:
+indirect PA_NET_BYPASS:
+   // If sampling is not enabled continue to drop processing
+   if (!uqGcCtrlReg0.BIT[GC_CNTRL_0_IMMCHK_SAMPLENABLED_BIT]) jmp CHECK_TP_CONDITIONS_LAB, NO_NOP;
+      MovBits ENC_PRI.BIT[14],ENC_PRI.BIT[15],1; // Jmul in HANDLE_DROPPED_PACKETS_LAB expects ENC_PRI[15..13]=[TRACE_ENABLE, NET_BYPASS_LAB, PA_DISCARD_LAB]
+      Mov ALU,{ 1 << IC_CNTRL_0_JUMBOMODE_OFF },4;//Bypass enable: sampling of jumbo frame is allowed if IC_CNTRL_0_JUMBOMODE_OFF
+   
+   //if not Jumbo(logical operation was done in previous Jmul !!), continue to sampling token bucket 
+   JZ CHECK_SAM_TB, NO_NOP;
+      // Check whether configuration allows to send Jumbo to CPU: 
+      //             1 - No support for jumbo frames (i.e. jumbo frames are not sampled to CPU), 
+      //             0 - Jumbo frames sample to CPU is allowed
+      And ALU, ALU,ALU,4, IC_CNTRL_0_MREG,MASK_BOTH;
+      PutKey  MSG_L3_USR_OFF(HW_KBS), uqOffsetReg0.byte[L3_OFFB], 4; // initialize in the message both MSG_L3_USR_OFF and MSG_L4_USR_OFF from uqOffsetReg0.byte[L3_OFFB] and uqOffsetReg0.byte[L4_OFFB]
+   
+   //this is a Jumbo packet
+   JNZ CHECK_TP_CONDITIONS_LAB, NOP_2;//no sampling of jumbo
+
+CHECK_SAM_TB:
+   EZstatPutDataSendCmdIndexReg uqTmpCtxReg1, IMM_SAMP_SIZE_CONST, STS_GET_COLOR_CMD;
+      nop;
+      nop;
+
+   EZwaitFlag F_SR;
+
+   // Check CPU sampling Token Bucket state (color is also returned to UDB.bits[16,17])
+   And ALU,STAT_RESULT_L, 1<<RED_FLAG_OFF, 1;// ALU.bit[1] = 0 if sample, 1 otherwise
+   Nop;
+
+   jnz CHECK_TP_CONDITIONS_LAB, NOP_2; // No sampling in case of RED color (i.e. drop\bypass), or in case of cont
+
+   //we get here if RED==0 (sample) and action is drop or bypass
+   // Sample packet to CPU (50 packets per second)
+
+   EZstatIncrByOneIndexImm IS_SAMP_CPU;   
+      // instead of NOP : if packet is sampled (not red), set bit in msg, used later if reaching default policy.
+      Or byCtrlMsgPrs2,byCtrlMsgPrs2,{1<<MSG_CTRL_TOPPRS_2_PA_SAMPL_BIT},1;        
+      nop; //##TODO_OPTIMIZE - check if this nop is needed.
+   
+   jmp HOST_P0_BYPASS_LAB, NOP_2;
+
+//Check Packet trace 
+CHECK_TP_CONDITIONS_LAB:
+   // Check if Trace is activated
+   xor uqCondReg, ALU, !ALU, 4, IC_CNTRL_1_MREG, MASK_BOTH;
+   MovBits uqCondReg.bit[0], ENC_PRI.bit[13], 3;
+   If(uqCondReg.bit[IC_CNTRL_1_TP_EN_OFF]) Mov byFrameActionReg, FRAME_TP_BYPASS_2NETW, 1;
+   If(uqCondReg.bit[0]) Movbits byGlobConfReg.bit[MSG_PA_TP_ACTION], 0, 1;// DROP with trace (will be used only if trace is enabled)
+   If(uqCondReg.bit[2]) Movbits byGlobConfReg.bit[MSG_PA_TP_ACTION], 1, 1;// BYPASS with trace (will be used only if trace is enabled)
+   MovBits ENC_PRI.bit[15], uqCondReg.bit[IC_CNTRL_1_TP_EN_OFF],1; // in case of trace, cont. in order to perform the trace, even if the action is DROP
+   PutKey MSG_GLOB_CONFIG_OFF(HW_KBS), byGlobConfReg, 1;// if bit 6 is 0: DROP with trace. if bit 6 is 1: BYPASS with trace. 
+
+// Count dropped or bypassed packets and continue with drop handling
+EZstatIncrByOneIndexReg uqTmpReg4;
+
+Jmul PRS_DONE_LAB,   // in case of trace, cont. in order to perform the trace, even if the action is DROP
+     CONF_NETWORK_BYPASS_LAB,       //BYPASS
+     GLOB_CONF_DROP_LAB,NO_NOP; //DROP
+     Nop;
+     Nop;
+
+//#undef icCtrlType;
+
+////////////////////////////////////////////////
+//   Packet Anomalies Failure - Continue Processing
+////////////////////////////////////////////////
+indirect NEXT_CHK_LAB:
+MovBits ENC_PRI.bit[13], bytmp3, 3;//restore saved bits to ENC_PRI
+EZstatIncrByOneIndexReg uqTmpReg4;
+//restore ENC_PRI
+Mov ENC_PRI , ENC_PRI_STORE  , 2;
+Return;
+   //Mov uxTmpReg2 , 0, 2;
+   Mov bytmp1, 0, 1;
+   Nop;
+
+////////////////////////////////////////////////
+//   Jmul fallback - 
+//   Packet Anomalies Failure - Send to CPU Handling
+////////////////////////////////////////////////
