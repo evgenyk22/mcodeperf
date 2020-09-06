@@ -727,7 +727,7 @@ Attack_IPV4_Treat;
 
 
 BDOS_IPV6:
-Attack_IPV6_Treat;
+//Attack_IPV6_Treat;
 
 jcond;
 jmp MAIN;

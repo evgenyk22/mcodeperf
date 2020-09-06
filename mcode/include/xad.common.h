@@ -1105,8 +1105,10 @@
 #define L3_KEY_OFFSET                    0
 
 // L3 fields offsets for IPV4:
-//already in #define CMP_BDOS_L23_SIP_OFF           ( 0 + L3_KEY_OFFSET )   // Size 16 bytes
-//in #define CMP_BDOS_L23_DIP_OFF           ( 16 + L3_KEY_OFFSET )  // Size 16 bytes
+//already in 
+
+#define CMP_BDOS_L23_SIP_OFF           UNF_PROT_SIP_OFF  // Size 16 bytes
+#define CMP_BDOS_L23_DIP_OFF           UNF_PROT_DIP_OFF  // Size 16 bytes
 
 
 // L3 fields sizes for IPv6:
@@ -1880,14 +1882,11 @@
 // Offset in TREG where we write temporary key type value of lookups in BDOS structures 14-23
 #define TREG_TEMP_BDOS_KEY_TYP_OFF     96 // Since IPv6 compound key is larger then IPv4 key
 #define TREG_TEMP_BDOS_KEY_TYP_SIZE    16
-
 #define UNF_PROT_CONT_COOKIE_OFF_KMEM    52 // size 3,  offset on KMEM, used for compound lookup in structure 63 (SYN_PROT_CONT_STR)
-
 #define UNF_FRAG_L4_MASK                 55  // size 1 , unf bdos controller
-
 #define UNF_POLICY_BDOS_CNG              56 //2 byte , controller + protocol encoding 
-
 #define UNF_TASK_CNTR                    58 // size 1
+#define UNF_L4_PROT                      59 // size 1
 
 
 
@@ -1898,6 +1897,8 @@
 #define UNF_BDOS_L3_KEY_OFFSET           ( UNF_TASK_CNTR  + 1 )  
 
 #define CMP_BDOS_L23_L3_SIZE_OFF         UNF_BDOS_L3_KEY_OFFSET       // Size 2 bytes
+
+#define CMP_BDOS_L23_L4_PROT_OFF         UNF_L4_PROT 
 
 #define CMP_BDOS_L23_ID_NUM_OFF        ( 2 + UNF_BDOS_L3_KEY_OFFSET )  // Size 2 bytes
 #define CMP_BDOS_L23_TOS_OFF           ( 4 + UNF_BDOS_L3_KEY_OFFSET ) // Size 1 byte
@@ -1915,8 +1916,8 @@ IP_TOS_OFF                  1             ;
 
 
 // L3 fields sizes for IPV4:
-//#define CMP_BDOS_L23_SIP_SIZE          16
-//#define CMP_BDOS_L23_DIP_SIZE          16
+#define CMP_BDOS_L23_SIP_SIZE          16
+#define CMP_BDOS_L23_DIP_SIZE          16
 
 #define CMP_BDOS_L23_ID_NUM_SIZE       2
 #define CMP_BDOS_L23_TOS_SIZE          1

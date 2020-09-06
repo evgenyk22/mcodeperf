@@ -618,7 +618,7 @@ mov4bits uqCondReg.bit[0],uqFramePrsReg.bits[16,17,18,7];
 If (Z) mov uqCondReg, 0x8,1;
 
 //rewrite l2tp tunnel cfg bit 
-MovBits  qGcCtrlReg0.bit[GC_CNTRL_0_PPS_POLICER_EN_BIT] , uqFramePrsReg.bit[L3_TYPE_OFF] , 1;
+MovBits  uqGcCtrlReg0.bit[GC_CNTRL_0_PPS_POLICER_EN_BIT] , uqFramePrsReg.bit[L3_TYPE_OFF] , 1;
 
 decode  ALU, uqCondReg, 2, MASK_0000000F, MASK_SRC1;
 

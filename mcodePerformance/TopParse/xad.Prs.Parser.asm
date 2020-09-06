@@ -585,6 +585,8 @@ MovBits uqFramePrsReg.bit[L4_MIN_LEN_OFF], ENC_PRO, 6;
 
 //fxor  uqCauiLagHash, uqDip.BYTE[0], uqDip.BYTE[2], 2,; //MB:2018: CAUI LAG Hash func calculation
 #undef uqDip;
+// L4 for bdos key 
+Copy UNF_L4_PROT(COM_KBS), IP_PRT_OFF(FMEM_BASE),  CMP_BDOS_L23_L4_PROT_SIZE;
 
 jmul TCP_DECODE_LAB , UDP_DECODE_LAB , ICMP_DECODE_LAB  , SCTP_DECODE_LAB , L4_PAYLOAD_LEN_CHECK_LAB , GRE_DECODE_LAB ,IPinIP_DECODE_LAB; 
 
