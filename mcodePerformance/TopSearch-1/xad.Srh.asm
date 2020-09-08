@@ -205,6 +205,88 @@ public SRH2_FFT_2CPU_CONT_TX_LAB:
 
    Halt;
 
+
+public SRH2_ROUTE_SYN_LAB:
+
+#ifdef SRC_DEBUG_NOPS
+Nop;
+Nop;
+#endif
+
+   // If there is no match - set valid + no match bit
+   MovImm TREG[16], 0x1, 1; 
+
+   Write CTX CTX_LINE_ROUTING_TABLE_RSLT, ROUTING_TABLE_STR, TREG[16], 1;
+
+
+	Lookup   TREG[0], VIF2_TXVLAN_STR, TREG[2], FFT_VID_KEY_SIZE , TREG[0], 0 ,NO_WR_LAST;
+
+   JNoMatch SRH2_FFT_ROUTE_NO_MATCH;
+
+   Lookup   TREG[FFT_VID_STR_IN_TREG+FFT_VID_STR_SIZE], 
+            TX_COPY_PORT_STR, 
+            TREG[4], 
+            2, 
+            NO_WR_LAST;
+
+   Write    TREG[FFT_VID_STR_IN_TREG+MDF_FFT_TX_COPY_INFO_OFF],
+            TX_COPY_PORT_STR,
+            TREG[FFT_VID_STR_IN_TREG+FFT_VID_STR_SIZE+1],
+            4;    
+
+   MovBits TREG[FFT_VID_STR_IN_TREG] , TREG[FFT_VID_STR_IN_TREG + FFT_VID_STR_SIZE ] , 8;
+   Write CTX CTX_LINE_OUT_IF, FFT_VID_STR, TREG[FFT_VID_STR_IN_TREG], (32-FFT_VID_STR_IN_TREG), TREG[32], FFT_VID_STR_IN_TREG ;
+   Halt; 
+#define MDF_ROUTE_TX_VLAN_OFF       14;  // 2 byte FFT/SFT TX VLAN
+
+public SRH2_ROUTE_2HOST_LAB:
+
+#ifdef SRC_DEBUG_NOPS
+   Nop;
+   Nop;
+#endif
+
+   lookup 	TREG[0], ROUTING_TABLE_STR, TREG[0], 2 ,TREG[0], 0 ,NO_WR_LAST;
+   //JNoMatch SRH2_FFT_ROUTE_NO_MATCH;
+   Write CTX CTX_LINE_ROUTING_TABLE_RSLT /*CTX_LINE_OUT_IF*/, ROUTING_TABLE_STR, TREG[0], 32 , TREG[32], 0 ;
+  
+   Halt;
+
+ 
+public SRH2_ROUTE_ALST_LAB:
+
+#ifdef SRC_DEBUG_NOPS
+   Nop;
+   Nop;
+#endif
+
+ROUTE_ALST_CONT:
+  
+  Lookup2Dests  TREG[FFT_VID_STR_IN_TREG+64], CTX CTX_LINE_ROUTING_TABLE_RSLT , ROUTING_TABLE_STR, TREG[0], 2 , TREG[0], 0 ,NO_WR_LAST ;
+  //Lookup  TREG[FFT_VID_STR_IN_TREG+64],  ROUTING_TABLE_STR, TREG[0], 2 , TREG[0], 0 ,NO_WR_LAST;
+  //write CTX CTX_LINE_ROUTING_TABLE_RSLT , ROUTING_TABLE_STR , TREG[FFT_VID_STR_IN_TREG+64] , 30 , TREG[0] , 0 , NO_WR_LAST; 
+
+  
+
+  JNoMatch SRH2_FFT_ROUTE_NO_MATCH;
+   
+   MovBits    TREG[FFT_VID_STR_IN_TREG+MDF_ROUTE_TX_VLAN_OFF+66] , TREG[FFT_VID_STR_IN_TREG+MDF_ROUTE_TX_VLAN_OFF+64] , 8; 
+
+   Lookup   TREG[FFT_VID_STR_IN_TREG+FFT_VID_STR_SIZE], 
+            TX_COPY_PORT_STR, 
+            TREG[FFT_VID_STR_IN_TREG+MDF_ROUTE_TX_VLAN_OFF+64 + 1], 
+            2, 
+            NO_WR_LAST;
+
+   Write    TREG[FFT_VID_STR_IN_TREG+MDF_FFT_TX_COPY_INFO_OFF],
+            TX_COPY_PORT_STR,
+            TREG[FFT_VID_STR_IN_TREG+FFT_VID_STR_SIZE+1],
+            4;    
+
+   MovBits TREG[FFT_VID_STR_IN_TREG] , TREG[FFT_VID_STR_IN_TREG + FFT_VID_STR_SIZE ] , 8;
+   Write CTX CTX_LINE_OUT_IF, FFT_VID_STR, TREG[FFT_VID_STR_IN_TREG], (32-FFT_VID_STR_IN_TREG), TREG[32], FFT_VID_STR_IN_TREG ;
+Halt; 
+
 // TX VLAN label
 public SRH2_FFT_TX_LAB:
 
@@ -369,12 +451,14 @@ L_ROUTING_COMMON:
 
 Public MAIN_START:
 
+Write TREG[KEYS_SAVE_AREA1] , POLICY_RES_CONF_STR ,  TREG [ 64 ] , 32;
+
 MAIN:
 // Put byte 2 of SYN_PROT_DEST_STR result in CondReg
 //WriteCond COND_REG, TREG[UNF_TASK_CNTR]; 
 
 
-Write TREG[KEYS_SAVE_AREA1] , POLICY_RES_CONF_STR ,  TREG [ 64 ] , 32;
+
 
 Jmul  TREG[UNF_TASK_CNTR],
       EMPTY,
@@ -433,7 +517,8 @@ POLICY:
 WriteCond COND_REG, TREG[UNF_PROT_POLICY_PHASE_OFF].bit[4], SET_MATCH_BIT;   
 JCond;                    
 JMatch POLICYP1;
-WriteIndreg POLICY_RES_CONF_STR_P0 ;
+
+//WriteIndreg POLICY_RES_CONF_STR_P0 ;
 
 LookupTCAM TREG[TREG_TCAM_RESULT_UNF_OFF], EXT_TCAM_STR, 
               TREG[UNF_PROT_VLAN_OFF     ],  19, // unified [ key vlan { 2 byte } + DIP {16 byte} + phys port { 1 byte } 
@@ -443,7 +528,7 @@ LookupTCAM TREG[TREG_TCAM_RESULT_UNF_OFF], EXT_TCAM_STR,
 jmp  POLICYTCAM_END;
 POLICYP1:
  
-WriteIndreg POLICY_RES_CONF_STR_P1 ;
+//WriteIndreg POLICY_RES_CONF_STR_P1 ;
 LookupTCAM TREG[TREG_TCAM_RESULT_UNF_OFF], EXT_TCAM_STR, 
               TREG[UNF_PROT_VLAN_OFF     ],  19, // unified [ key vlan { 2 byte } + DIP {16 byte} + phys port { 1 byte } 
               TREG[UNF_PROT_SIP_OFF   ], /*16*/21, // unified [ SIP { 16 byte} ]  
@@ -461,12 +546,30 @@ Lookup TREG[ TREG_TCAM_RESULT_OFF  ], POLICY_RES_STR,
        TREG[ TREG_TCAM_IDX_UNF_OFF ], 0,
        NO_WR_LAST;  
 
+MovBits TREG[UNF_PROT_POLICY_PHASE_OFF].bit[4] , TREG[UNF_PROT_POLICY_PHASE_OFF].bit[6] , 1;
+WriteCond COND_REG, TREG[UNF_PROT_POLICY_PHASE_OFF].bit[4], SET_MATCH_BIT;   
+JCond;                    
+JMatch POLICYP1_CONF;
 
-
-     //policy configuration result start from 64
-Lookup TREG[ TREG_TCAM_RESULT_OFF ], IND_REG,
+//policy configuration result start from 64
+Lookup TREG[ TREG_TCAM_RESULT_OFF ], POLICY_RES_CONF_STR_P0,
 		  TREG[ { TREG_TCAM_RESULT_OFF + 3 } ], 2 ,TREG[TREG_TCAM_IDX_OFF], 0,RES_SIZE 32 ,
         NO_WR_LAST; 
+jcond;
+jmp POL_CONF_RES;
+
+POLICYP1_CONF:
+//policy configuration result start from 64
+Lookup TREG[ TREG_TCAM_RESULT_OFF ], POLICY_RES_CONF_STR_P1,
+		  TREG[ { TREG_TCAM_RESULT_OFF + 3 } ], 2 ,TREG[TREG_TCAM_IDX_OFF], 0,RES_SIZE 32 ,
+        NO_WR_LAST; 
+
+
+POL_CONF_RES:
+
+WriteCond COND_REG, TREG[TREG_TCAM_RESULT_OFF].bit[4], SET_MATCH_BIT;   
+JCond;                    
+JNoMatch POLICY_NO_MATCH;
 
 
 Write TREG[BDOS_POLICY_RES] , POLICY_RES_CONF_STR , TREG[TREG_TCAM_RESULT_OFF] , 32  ,  NO_WR_LAST;
@@ -637,6 +740,7 @@ BDOS:
     JCond;                    
     JNoMatch BDOSP0;
 
+    WriteIndReg { PACKET_SIZE_STR + 32 };
      //bdos local configuration result
     Lookup TREG[BDOS_TREG_TMP ], DDOS_CTRL_STR_PHASE1,
 	  	     TREG[ { BDOS_POLICY_RES + 2 } ], 2, TREG[ BDOS_TREG_TMP ], 2 , //bdos cntr 
@@ -646,6 +750,7 @@ BDOS:
 
 BDOSP0:
 
+    WriteIndReg PACKET_SIZE_STR;
      //bdos local configuration result
     Lookup TREG[BDOS_TREG_TMP ], DDOS_CTRL_STR_PHASE0,
 	  	     TREG[ { BDOS_POLICY_RES + 2 } ], 2, TREG[ BDOS_TREG_TMP ], 2 , //bdos cntr 
@@ -696,8 +801,13 @@ ICMP_BDOS:
 
 
 TCP_BDOS:    
-
+    /*
+    jcond;
+    jmp MAIN;
+    */
     Attack_TCP_Treat;
+    
+    //Write OREG, BDOS_ATTACK_RESULTS_L4_STR, TREG[TREG_BDOS_RES_OFF], BDOS_ATTACK_RESULT_SIZE,NO_WR_LAST;
     jcond;
     jmp BDOS_L3_START;
     
@@ -724,6 +834,11 @@ jcond;
 jmatch BDOS_IPV6; 
 
 Attack_IPV4_Treat;   
+// Write first part L23 results
+//Write OREG, BDOS_ATTACK_RESULTS_L23_STR, TREG[TREG_BDOS_RES_OFF], BDOS_ATTACK_RESULT_SIZE,NO_WR_LAST;
+//Write OREG, BDOS_ATTACK_RESULTS_L23_2_STR, TREG[TREG_BDOS_RES_OFF], BDOS_ATTACK_RESULT_SIZE,NO_WR_LAST;
+//zero policy placeholder , it will be used for BDOS result 
+//LookUp TREG[ TREG_BDOS_RES_OFF ] , DNS_ZERO_RES_STRUCT , TREG[ { TREG_TEMP_BDOS_KEY_TYP_OFF + 1} ] , 1 ,TREG[0], 0  , RES_SIZE 32, KEEP_PREV_CTRL_BITS , NO_WR_LAST;
 
 
 BDOS_IPV6:

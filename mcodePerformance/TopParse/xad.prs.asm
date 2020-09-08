@@ -355,13 +355,8 @@ if (!FLAGS.BIT[F_MH]) jmp TCAM_SEARCH_FAIL_LAB, NO_NOP;
 
 RESULT_IS_READY_IN_CAMO_LAB:
 
-   /* TCAM 64 MATCH ! */
-   // read both "has RX copy" bit and "switch VLAN" bit to byCtrlMsgPrs2
-   //MovBits byCtrlMsgPrs2.BIT[MSG_CTRL_TOPPRS_2_HAS_RX_COPY_BIT], CAMO.bit[FFT_VIF_DATA_HAS_RX_COPY_PORT_OFF], 1;
-   //MovBits byCtrlMsgPrs2.BIT[MSG_CTRL_TOPPRS_2_SLT_VLAN_BIT], CAMO.bit[FFT_VIF_DATA_SWITCH_VLAN_OFF], 1;
-
-     //clear routing mode selectin for SSL port type
-   If (CAMO.bit[SSL_PORT_DET]) MovBits bitPRS_isRoutingMode , 0 ,1 ;
+ //clear routing mode selectin for SSL port type
+If (CAMO.bit[SSL_PORT_DET]) MovBits bitPRS_isRoutingMode , 0 ,1 ;
 
    //extract 5 bits VIF[10:6] from result
 MovBits ALU, CAMO.bit[FFT_VIF_DATA_VIFID_OFF], FFT_VIF_DATA_VIFID_SIZE, RESET;
@@ -371,54 +366,22 @@ MovBits bySrcPortReg, CAMO.bit[FFT_VIF_DATA_PHYSPRT_OFF], FFT_VIF_DATA_PHYSPRT_S
 PutKey MSG_VIF_OFF(HW_KBS), ALU, 1;
 
 PER_VIF_COUNTING_LAB:
-/* Ariving here:
-   (A) In trasparent mode, or
-   (B) In case that all MAC validations passed ok, i.e. frame.DMAC has match with MY_MAC or MAC_BC or MAC_MC, or L2 control frame,
-       and this is not a GRE KeepAlive request / reply frame (GRE KeepAlive frame may arrive here only in case that the host configured
-       the mcode To disable the GRE KeepAlive and RadwareTunnelGRE frames handling).
-   (C) In case that routing mode, MAC no match and not L2 control frame - but in this case the handling will be according to
-        IC_CNTRL_1_DMAC_NO_MATCH_OFF configuration (in this case ENC_PRI is overwritten to fit DMAC_NO_MATCH handling) */
-/* Increment the relevant vif input counter by 1 */
+
+//--bug should be in driver  swap GC_CNTRL_0_GRE_TUN_CFG_BIT and GC_CNTRL_0_POL_CTRL_ACTIVE_BIT
+MovBits uqGcCtrlReg0.bit[GC_CNTRL_0_GRE_TUN_CFG_BIT] , uqGcCtrlReg0.bit[GC_CNTRL_0_POL_CTRL_ACTIVE_BIT] , 1;
 
 
-/* save global configuration (dsecoded) in message */
-//PutKey MSG_GLOB_CONFIG_OFF(HW_KBS), byGlobConfReg, 1;// 0x1 - DROP, 0x2 - CONT, 0x4 - BYPASS_TO_NW, 0x8 - TO_CPU
+//MovBits byCtrlMsgPrs2.BIT[MSG_CTRL_TOPPRS_2_IS_GRE_DECAP_REQUIRED_BIT], bitTmpCtxReg2RemoveRdwrGRETunnel, 1; 
 
 
-// Save the physical port
-//MovBits bySrcPortReg, CAMO.bit[FFT_VIF_DATA_PHYSPRT_OFF], FFT_VIF_DATA_PHYSPRT_SIZE;
-//PutKey MSG_SRC_PORT_OFF(HW_KBS), bySrcPortReg, 1; // ##TODO_OPTIMIZE - check option to move this line to after the JMUL. also check if this can be repleaced with the source port from the HW_MSG (not the lookup result of the VIF table, as implemented today). see comment near the definition of the constant MSG_SRC_PORT_OFF.
-   MovBits byCtrlMsgPrs2.BIT[MSG_CTRL_TOPPRS_2_IS_GRE_DECAP_REQUIRED_BIT], bitTmpCtxReg2RemoveRdwrGRETunnel, 1; 
+Mov ALU , PA_CHECK_ONLY , 4;
 
-   /* Populate ENC_PRI with global setting mode - Global (Send TO CPU / BYPASS to NW / Continue parsing frame / DROP) */
-   //MovBits ENC_PRI.bit[9], byGlobConfReg.bit[0], 7;
-   //Mov ALU ,  uqGcCtrlReg0.
-   Putkey UNF_PROT_POLICY_PHASE_OFF(COM_KBS), uqGcCtrlReg0.byte[2], CMP_POLICY_PHASE_SIZE;  
+Putkey UNF_PROT_POLICY_PHASE_OFF(COM_KBS), uqGcCtrlReg0.byte[2], CMP_POLICY_PHASE_SIZE;  
 
-   Mov ALU , PA_CHECK_ONLY , 4;
-// Moved this code (only the code regarding Vlan) here from syn protection
-// This code was in 2 paths of syn-prot: syn packet and ack-rst packet
-// code was moved here because it uses sHWD5 which is overriden in parseFrameWithPA
-/*
-#ifndef __SIM__ 
-MovBits ALU.bit[12], sHWDall_bitOneTag, 1, RESET;
-MovBits ALU, sHWD_uxTag2Vid, 12;
-#else
-MovBits ALU.bit[12], sHWDall_bitNoTag, 1, RESET;
-MovBits ALU, sHWD_uxTag1Vid, 12;
-#endif
-*/
 PutKey MSG_SRC_PORT_OFF(HW_KBS), bySrcPortReg, 1; // ##TODO_OPTIMIZE - check option to move this line to after the JMUL. also check if this can be repleaced with the source port from the HW_MSG (not the lookup result of the VIF table, as implemented today). see comment near the definition of the constant MSG_SRC_PORT_OFF.
-// For port that has "SLT VLAN" attribute, there is no need to run packet anomalies, and any of the security features in TOP resolve.
-// Instead, packets from this port will be treated as if the global processing mode is bypass (host or network)
-// TODO: this part of code is here because hash calculations are required (in PARSE_AND_CALC_HASH).
-//       In case there is no need for the hash value, move the below lines to be performed in the FRAME_CONT_ACTION_LAB label, before
-//       running parsing code.
-//movbits byTempCondByte1.BIT[MSG_CTRL_TOPPRS_2_SLT_VLAN_BIT], bitPRS_isSltVlanMode, 1;
-
 PutKey UNF_PROT_VLAN_OFF (COM_KBS), $usrVlanTag , 2;
 
-//If (byTempCondByte1.BIT[MSG_CTRL_TOPPRS_2_SLT_VLAN_BIT]) Jmp PRS_SLT_VLAN_LAB;
+
 If (CAMO.bit [SSL_PORT_DET]) Mov uqGcCtrlReg0 , ALU  , 4;
 If (CAMO.bit [SSL_PORT_DET]) Mov byFrameActionOverrideReg , FRAME_BYPASS_HOST  , 1;
 
@@ -429,30 +392,7 @@ PutHdr  HREG[ 1 ], MAIN_LKP;
 PutKey UNF_TASK_CNTR(COM_KBS), ALU , 1; 
 
  
-   // following instructions are executed whether the jump is taken or not.
-   // They are taken meaningfull only in the common path where there is no bypass feature
-
-
 #include "xad.prs.parser.asm"
-
-
-//parseFrame;
-
-// This actually jumps according to 1 hot decoding of the 2 LSbits of MREG.
-// ##TODO_OPTIMIZE - only set the upper bits of ENC_PRI and change the label so that the jump will be faster (as jump in JMUL for the 1st 3 labels is faster then to the next ones in line)...
-/* Jump to the frame handling as set in MREG (allows global configuration of Bypass to host, Bypass to network, Drop and Continue that may change in runtime).
-   This value can be overwritten in mcode in some cases as can be seen by direct write to ENC_PRI above. */
-   /*
-Jmul ERROR_HANDLING,                // Error:    Increment error counter and discard frame
-     ERROR_HANDLING,                // Error:    Increment error counter and discard frame
-     ERROR_HANDLING,                // Error:    Increment error counter and discard frame
-     GLOB_CONF_BYPASS_HOST_LAB,     // TO CPU:   Send from Network port to Host port (action: FRAME_BYPASS_HOST)
-     GLOB_CONF_NETWORK_BYPASS_LAB,  // BYPASS:   Send from Network port to Network port (action: FRAME_BYPASS_NETWORK). This will send to NW after running the parser, which assures that the routing key will be built (in case of routing mode).
-     FRAME_CONT_ACTION_LAB,         // CONTINUE: Perform packet parsing (action: FRAME_CONT_ACTION)
-     GLOB_CONF_DROP_LAB;            // DROP:     Increment RT counter and discard frame
-   */
-      
-//##TODO_OPTIMIZE: (low proirity task) need to add code to catch unexpected fall though.
 
 // Replace network default settings    
 GLOB_CONF_NETWORK_BYPASS_LAB:

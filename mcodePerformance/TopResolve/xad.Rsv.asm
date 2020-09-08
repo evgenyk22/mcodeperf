@@ -10,7 +10,6 @@
 *  Usage:         TOPresolve main file
 *
 *******************************************************************************/
-
 EZTop Resolve;
 
 #include "EZcommon.h"
@@ -27,132 +26,86 @@ EZTop Resolve;
 #include "xad.Rsv.macros.asm"
 #include "xad.Rsv.Acl.asm"  
 
+#define RTPC_DEBUG_COUNTERS 1
 
+Export   "rsv_labels.h";
+
+LdAggregateENC_PRI TRUE;
+ldreg UDB , 0;
 
 // Base registers initialization
-Mov HW_OBS,  0, 1;                 
+//Mov HW_OBS,  0, 1;                 
+
 Mov ENC_PRI, 0, 2;
-//Hardware message 0 , start from 1      
+    
+//Hardware message 0 , start from 1
 Mov COM_HBS , 1 , 1;
 Mov KMEM_OFFSET , KMEM_RSV2SRH2_FFT_KEY_OFF , 1;
 GetRes  byFrameActionReg, MSG_ACTION_ENC_OFF(MSG_STR), 1; // Extract frame action
 
-//PutHdr  HREG[ 1 ], RSV_FFT_VID_LKP_INVALID_HDR;           // Init HREG1: the init is in order to have the placeholder of Key that may (or may not) be passed in HREG[1] and have a constant start offset for key passed in HREG[2]
-
-/////////////////////////////////////////////////////////////////////////////////////////////
-// The following "C style" pseudo code describes how the FFT search label in SRCH2 is chosen.
-// Below this comment is the implementation itself
-
-//if (1 == byFrameActionReg.BIT[FRAME_SYN_COOKIE_GEN_BIT])
-//{
-//   PutHdr HREG[ 1 ], RSV_FFT_SYN_LKP_HDR;     
-//}
-//else if (1 == byCtrlMsgRsv0.bit[MSG_CTRL_TOPRSV_0_TP_EN_BIT])
-//{
-//  if (1 == byCtrlMsgRsv0.bit[MSG_CTRL_TOPRSV_0_TP_COPY_PRT_BIT])
-//   {
-//      PutHdr HREG[ 1 ], RSV_FFT_VLAN_TP_ONLY_LKP_HDR;
-//   }
-//   else // (1 == byCtrlMsgRsv0.bit[MSG_CTRL_TOPRSV_0_TP_COPY_BYPASS_PRT_BIT])
-//   {
-//      PutHdr HREG[ 1 ], RSV_FFT_TP_LKP_HDR;
-//  }
-//}
-//else
-//{
-//     PutHdr HREG[ 1 ], RSV_FFT_TX_LKP_HDR;
-//}
-//////////////////////////////////////////////////////////////////////////////////////////////
-
-// Start with assuming main path will be taken (bypass).
-// This will later on be overwritten if it turns out to be that either TP or SYN paths are taken
-//PutHdr HREG[ 1 ], RSV_FFT_TX_LKP_HDR;
-
 // Populate the TOPsearch2 FFT key
-//copy KMEM_RSV2SRH2_FFT_KEY_OFF( HW_OBS ),  MSG_VIF_OFF(MSG_STR), 1;
+
 Mov byTemp3Byte0 , 0 , 1;
 copy KMEM_OFFSET( HW_OBS ),  MSG_VIF_OFF(MSG_STR), 1;
-  
 
 movBits ENC_PRI.bit[7], byFrameActionReg.bit[0], 8;
-
 // Init registers and copy the whole msg from TOPparse
 Copy  0(HW_OBS), 0(MSG_STR),  32;
-
-
 //set default HREG[ 1 ]¨content according to input action
 MovMul 0, 0, SRH2_FFT_FRMHOSTTX_LAB, 0, 0, 0, 0, 0, SRH2_FFT_TX_LAB, 0, 0;
-Mov  byGlobalStatusBitsReg, 0, 1;
+//Mov  byGlobalStatusBitsReg, 0, 1;
 
 //Avoid LKP_VALID bits set in case when no action expected 
-Sub ALU , ENC_PRO , 0 ,2 ;
+Sub ALU , ENC_PRO , 0 ,2 ;                                         
 
 Mov  uqGlobalStatusBitsReg.byte[2], 0, 2;
 
 //construct dynamic label 
 
+// Message control registers init
+GetRes byCtrlMsgPrs2Rsv2,  MSG_CTRL_TOPPRS_2_OFF(MSG_STR), 1;   // initialize byCtrlMsgPrs2Rsv2 (input output register)
+GetRes byCtrlMsgPrs0,  MSG_CTRL_TOPPRS_0_OFF(MSG_STR), 2;   // both byCtrlMsgPrs0 and byCtrlMsgPrs1 are initilized here
+
+MovBits byGlobalStatusBitsReg.bit[SRC_100G_BIT] , byCtrlMsgPrs2Rsv2.BIT[MSG_CTRL_TOPPRS_2_IS_CAUI_PORT_BIT] , 1;
+
 JZ SKIP_HREG1_CHANGE; 
     Mov    byCtrlMsgRsv0,  0, 2;                                // both byCtrlMsgRsv0 and byCtrlMsgRsv1 are zeroed here
     Copy 32(HW_OBS), 32(MSG_STR), 32;
 
+//set routing mode
+if (bitRSV_isRoutingMode) 
+    jmp SKIP_HREG1_CHANGE ,NOP_2;
+
 //Or ALU , ALU , uqTmpReg3 ,4;      
 PutHdr HREG[ COM_HBS ], ((LKP_VALID   | (((RSV_FFT_TX_COPY_PORT_LKP_KEY_SIZE - 1) >> 4) << HREG_KEY_SIZE_BIT) | (KEY_TYPE_1 << HREG_KEY_TYPE_BIT))) ;
 PutHdrBits HREG[ COM_HBS ].BIT[ HREG_FIRST_LINE_ADDR_BIT ]  , ENC_PRO , 10;
-//movbits $uqRSV_INDIRECT_CTX_LOAD.bit[CTX_LINE_OUT_IF], HREG[COM_HBS].bit[22], 1;
 MovBits byTemp3Byte0.bit[CTX_LINE_OUT_IF]  , 1 , 1;
 Add COM_HBS  , COM_HBS ,  1 , 1;
 Add KMEM_OFFSET , KMEM_OFFSET , RSV_FFT_TX_COPY_PORT_LKP_KEY_SIZE_KMEM_ALIGN , 1;
 
-//xor ALU, ALU, !ALU, 4, TRAFFIC_ENGINE_NUMBER, MASK_BOTH; // using MREG[12] 
-//Copy { KMEM_RSV2SRH2_FFT_KEY_OFF + 2 } ( HW_OBS ),  MSG_HASH_CORE_OFF(MSG_STR), 1;
-//PutKey { KMEM_RSV2SRH2_FFT_KEY_OFF + 4 } ( HW_OBS ),  ALU, 1;
-
-
 SKIP_HREG1_CHANGE:
 
-// Message control registers init
-GetRes byCtrlMsgPrs2,  MSG_CTRL_TOPPRS_2_OFF(MSG_STR), 1;   // initialize byCtrlMsgPrs2
-GetRes byCtrlMsgPrs0,  MSG_CTRL_TOPPRS_0_OFF(MSG_STR), 2;   // both byCtrlMsgPrs0 and byCtrlMsgPrs1 are initilized here
 
 // Prepare RX copy test
-Mov byTempCondByte, byCtrlMsgPrs2, 1;
+Mov byTempCondByte, byCtrlMsgPrs2Rsv2, 1;
 
 // Set ENC_PRI register MSbit to jump into special label handling inter-NP packets path.
 // This is done in such way in order to minimize code processing, and join all relevant 
 // paths into one jmul instruction
-MovBits ENC_PRI.bit[15], byCtrlMsgPrs2.BIT[MSG_CTRL_TOPPRS_2_INTERLINK_PACKET_BIT], 1;
+MovBits ENC_PRI.bit[15], byCtrlMsgPrs2Rsv2.BIT[MSG_CTRL_TOPPRS_2_INTERLINK_PACKET_BIT], 1;
 
-If (!byTempCondByte.BIT[MSG_CTRL_TOPPRS_2_HAS_RX_COPY_BIT])   
-   Jmp NO_RX_COPY_LAB, NO_NOP; 
-
+mov byTempCondByte1, byFrameActionReg, 1;
       // Copying control bits that needs to be passed from TOPparse through TOPresolve to TOPmodify without modification
       // initialize MSG_CTRL_TOPRSV_2_HAS_RX_COPY_BIT, MSG_CTRL_TOPRSV_2_DELAY_DROP_BIT, MSG_CTRL_TOPRSV_2_INTERLINK_PACKET_BIT, MSG_CTRL_TOPRSV_2_IS_CAUI_PORT_BIT
-      MovBits byCtrlMsgRsv1.bit[MSG_CTRL_TOPRSV_2_HAS_RX_COPY_BIT], byCtrlMsgPrs2.bit[MSG_CTRL_TOPPRS_2_HAS_RX_COPY_BIT], 4;	
 
       // Copying control bits that needs to be passed from TOPparse through TOPresolve to TOPmodify without modification
-      MovBits byCtrlMsgRsv1.bit[MSG_CTRL_TOPRSV_1_L3_TUNNEL_EXISTS_BIT], byCtrlMsgPrs1.bit[MSG_CTRL_TOPPRS_1_L3_TUNNEL_EXISTS_BIT], 5;	// initialize also MSG_CTRL_TOPPRS_1_ROUTING_EN_BIT, MSG_CTRL_TOPPRS_1_IS_IPV4_BIT, and MSG_CTRL_TOPPRS_1_IS_IPV6_BIT, MSG_CTRL_TOPPRS_1_USER_VLAN_IN_FRAME_BIT 
-
-Copy KMEM_OFFSET ( HW_OBS ),  MSG_VIF_OFF(MSG_STR), 1;
-
-Add KMEM_OFFSET , KMEM_OFFSET , RSV_FFT_RX_COPY_PORT_LKP_KEY_SIZE_KMEM_ALIGN , 1;
-
-//movbits $uqRSV_INDIRECT_CTX_LOAD.bit[CTX_LINE_RX_COPY_INFO], HREG[COM_HBS].bit[22], 1; // to mark to TOPmodify's HW to start execution only after the context line is ready with this result of the RX copy ports
-MovBits byTemp3Byte0.bit[CTX_LINE_RX_COPY_INFO]  , 1 , 1;
-// The following commands are executed only when packet arrives from a port which has "RX copy port".
-If (byTempCondByte.BIT[MSG_CTRL_TOPPRS_2_DELAY_DROP_BIT])
-   Jmp  FRAME_BYPASS_NETWORK_LAB, NO_NOP;    // can also be directed to TOP_RESOLVE_TERMINATION_LAB (shoter execution)
-
-      PutHdr HREG[ COM_HBS ], RSV_RX_COPY_PORT_LKP_HDR;              // Init HREG2: the init is in order to have the placeholder of Key that may (or may not) be passed in HREG[2]
-      Add COM_HBS  , COM_HBS ,  1 , 1;
-
-
-NO_RX_COPY_LAB:
+MovBits byCtrlMsgRsv1.bit[MSG_CTRL_TOPRSV_1_L3_TUNNEL_EXISTS_BIT], byCtrlMsgPrs1.bit[MSG_CTRL_TOPPRS_1_L3_TUNNEL_EXISTS_BIT], 5;	// initialize also MSG_CTRL_TOPPRS_1_ROUTING_EN_BIT, MSG_CTRL_TOPPRS_1_IS_IPV4_BIT, and MSG_CTRL_TOPPRS_1_IS_IPV6_BIT, MSG_CTRL_TOPPRS_1_USER_VLAN_IN_FRAME_BIT 
 
 Jmul FRAME_RECEIVED_FROM_2ND_NP,          //OhadM:handling packets from peer NP device  
      FRAME_TP_BYPASS_2NETW_TMP_LAB,       //FRAME_TP_BYPASS_2NETW
-     FRAME_BYPASS_CPU_2NETWORK_LAB /*FRAME_BYPASS_CPU_2NETWORK_LOCAL_LAB*/, //FRAME_HOST_BYPASS_2NETW
+     FRAME_BYPASS_CPU_2NETWORK_LOCAL_LAB, //FRAME_HOST_BYPASS_2NETW
      ERROR_HANDLING_RSV,                  //FRAME_SYN_COOKIE_GEN    
-     CONTROLFRAME_ACTION_LAB,             //FRAME_CONF_EXTRACT
+     SPEC_ROUTE,                  //FRAME_CONF_EXTRACT
      ERROR_HANDLING_RSV,                  //FRAME_DROP              //AmitA: this was not set in TOPparse and not in TOPresolve, so probably should never jump into here.
      CONT_LAB,                            //FRAME_CONT_ACTION
      FRAME_BYPASS_HOST_LAB_GLOB_TMP_MODE, //FRAME_BYPASS_HOST
@@ -165,17 +118,62 @@ jmp ERROR_HANDLING_RSV, NOP_2;  // This should never happen
 
 FRAME_BYPASS_NETWORK_LAB:
 
+if (!bitRSV_isRoutingMode) jmp FRAME_BYPASS_NETWORK_TRANSPARENT_LAB;
+
+//global bypass , set routing and txcoppy search 
+    GetRes uqTmpReg6 , 0(INT_TCAM_STR), 3 ;
+    Nop;
+     
+PutHdr HREG[ COM_HBS ], RSV_ROUTE_ALST_LKP_HDR;
+and ALU, uqTmpReg6.byte[1], uqTmpReg6.byte[1] , 2, MASK_000007FF, MASK_BOTH;    
+MovBits byTemp3Byte0.bit[CTX_LINE_ROUTING_TABLE_RSLT]  , 1 , 1;
+PutKey KMEM_OFFSET ( HW_OBS ),  ALU, 2;
+
+If (!RTPC_IS_ENABLED_BIT) Add COM_HBS  , COM_HBS ,  1 , 1;
+
+If (!RTPC_IS_ENABLED_BIT) MovBits byTemp3Byte0.bit[CTX_LINE_OUT_IF]  , 1 , 1;
+If (!RTPC_IS_ENABLED_BIT) Add KMEM_OFFSET , KMEM_OFFSET , RSV_FFT_RX_COPY_PORT_LKP_KEY_SIZE_KMEM_ALIGN , 1; 
+
+
+FRAME_BYPASS_NETWORK_TRANSPARENT_LAB:
+
+//RTPC should not change JUMBO frame action
+if (byCtrlMsgPrs0.bit[MSG_CTRL_TOPPRS_0_JUMBO_STATUS_BIT]) jmp FRAME_BYPASS_NETWORK_TRANSPARENT_CONT, NO_NOP;
+   Nop; 
+   Nop;
+
+If (RTPC_IS_ENABLED_BIT) //RTPC is set
+   jmp  SEND_PACKET_LAB_CPU, NOP_2;
+  
+FRAME_BYPASS_NETWORK_TRANSPARENT_CONT: 
+
 jmp SEND_PACKET_LAB, NO_NOP;
     MovBits byCtrlMsgRsv0.bit[MSG_CTRL_TOPRSV_0_RTM_GLOB_BYPASS_BIT], 1, 1;   
     Mov byFrameActionReg, FRAME_BYPASS_NETWORK, 1;
 
-//FRAME_BYPASS_CPU_2NETWORK_LOCAL_LAB:
-//jmp FRAME_BYPASS_CPU_2NETWORK_LAB, NOP_2;
+FRAME_BYPASS_CPU_2NETWORK_LOCAL_LAB:
 
+if (!bitRSV_isRoutingMode) jmp FRAME_BYPASS_CPU_2NETWORK_LAB , NOP_2;
+
+//set tx copy table search for from Host path
+    GetRes uqTmpReg6 , 0(INT_TCAM_STR), 3 ;
+    PutHdr HREG[ COM_HBS ], RSV_ROUTE_ALST_LKP_HDR;
+
+ and ALU, uqTmpReg6.byte[1], uqTmpReg6.byte[1] , 2, MASK_000007FF, MASK_BOTH;    
+ Nop;
+ PutKey KMEM_OFFSET ( HW_OBS ),  ALU, 2;
+ Add COM_HBS  , COM_HBS ,  1 , 1;
+
+jmp FRAME_BYPASS_CPU_2NETWORK_LAB;
+    MovBits byTemp3Byte0.bit[CTX_LINE_OUT_IF]  , 1 , 1;    
+    Add KMEM_OFFSET , KMEM_OFFSET , RSV_FFT_RX_COPY_PORT_LKP_KEY_SIZE_KMEM_ALIGN , 1;
+
+// Reach here if PA and Packet trace
 FRAME_TP_BYPASS_2NETW_TMP_LAB:
 xor ALU, ALU, !ALU, 4, GC_CNTRL_2_MREG, MASK_BOTH;                   // Get MREG Value
-   Nop;
+   GetRes uqTmpReg3.byte[0], MSG_GLOB_CONFIG_OFF(MSG_STR), 1;// Get Message
 Movbits byTempCondByte.bit[0], ALU.bit[GC_CNTRL_2_IMM_CHK_TP_ACTION_OFFSET], 1;
+Movbits byTempCondByte.bit[1], uqTmpReg3.bit[MSG_PA_TP_ACTION], 1;
 
 FRAME_TP_BYPASS_2NETW_LAB:
 
@@ -183,23 +181,22 @@ FRAME_TP_BYPASS_2NETW_LAB:
 //byTempCondByte.bit[3] - ; 0 - trace , 1 - copy type
 //STAT_OPERATION TP_ACT_TB, TP_SIZE_CONST, STS_GET_COLOR_CMD;
 Mov ALU, TP_SIZE_CONST, 4;
-   Nop;
+Mov ENC_PRI , 0 , 2;
 EZstatPutDataSendCmdIndexImm TP_ACT_TB, ALU, STS_GET_COLOR_CMD;
-   nop;
-   nop;
-EZwaitFlag F_SR;
+decode ALU, byTempCondByte, 1, MASK_00000007, MASK_SRC1;
+nop;
+
+if       ( !FLAGS.BIT [ F_SR ] )
+    jmp   $;
+        mov ENC_PRI.byte[1], ALU, 1 ;
+        Nop;
+
 
 MovBits byTempCondByte.bit[2], STAT_RESULT_L.bit[RED_FLAG_OFF],      1; // Color is also returned to UDB.bits 16,17.
 
 // Increment number TP marked packets
 EZstatIncrByOneIndexImm  TP_CNTRL_PRT_MRK; 
 
-//EZstatIncrByOneIndexReg
-decode ALU, byTempCondByte, 1, MASK_00000007, MASK_SRC1;
-   nop;
-mov ENC_PRI.byte[1], ALU, 1 ;
-Mov ENC_PRI.byte[0], 0, 1;
-   nop;
 
 //jmul error, check it
 Jmul TP_FRAME_BYPASS_NETWORK_LAB, 
@@ -213,11 +210,7 @@ Jmul TP_FRAME_BYPASS_NETWORK_LAB,
      ERROR_HANDLING_RSV,
      ERROR_HANDLING_RSV,
      ERROR_HANDLING_RSV;
-   nop;
-   nop;
-
-jmp FRAME_DROP_LAB /*TP_FRAME_DROP_LAB*/, NOP_2;
-
+ 
 
 TP_FRAME_BYPASS_NETWORK_LAB:
 //STAT_OPERATION GS_TRL_EX_PAS, 1, EZ_INCR_CMD_STS; 
@@ -227,7 +220,6 @@ jmp FRAME_BYPASS_NETWORK_LAB, NOP_1;
 
 //TP_FRAME_DROP_LAB:
 //jmp FRAME_DROP_LAB, NOP_2;
-
       
 TP_BYPASS_COPY_LAB:
 #define TP_BYPASS_COPY ((1<<MSG_CTRL_TOPRSV_0_TP_COPY_BYPASS_PRT_BIT) | (1<<MSG_CTRL_TOPRSV_0_TP_EN_BIT));
@@ -238,11 +230,10 @@ jmp FRAME_BYPASS_NETWORK_LAB, NO_NOP;
   
 TP_COPY_LAB:
 //STAT_OPERATION GS_TRL_EX_DRP, 1, EZ_INCR_CMD_STS;
-#if !GLOBAL_RTM_IN_TOP_MODIFY
 jmp rtmCountersUpdate_LAB, NO_NOP;  //RT monitoring drop counters update
    Mov PC_STACK, TP_COPY_RT_DONE_LAB, 2;
    MovBits byGlobalStatusBitsReg.bit[RTM_RECIVE_DROP_IND_BIT], 0, 1;  
-#endif
+
 
 //returns after realtime counters treatment
 indirect TP_COPY_RT_DONE_LAB:
@@ -252,7 +243,6 @@ PutHdr HREG[ COM_HBS ], RSV_FFT_VLAN_TP_ONLY_LKP_HDR;
 jmp FRAME_BYPASS_NETWORK_LAB, NO_NOP;
    MovBits byCtrlMsgRsv0.bit[MSG_CTRL_TOPRSV_0_TP_COPY_PRT_BIT], TP_COPY, 3;
    Add  COM_HBS , COM_HBS , 1, 1;
-   
 
 
 
@@ -268,19 +258,107 @@ if (!byCtrlMsgPrs0.bit[MSG_CTRL_TOPPRS_0_ANALYZE_POLICY_BIT]) jmp FRAME_BYPASS_H
 
 
 CONT_LAB:
- 
+
+xor uqTmpReg6, ALU, !ALU, 4, RTPC_FILTER_EN, MASK_BOTH;   // Get MREG Value
+//Mov ENC_PRI, 0 , 2;
+GetCtrlBits UREG[2] ,         STRNUM[ L4SRCPRT_STR ].bit[ MATCH_BIT ] , 
+                              STRNUM[ L4DSTPRT_STR ].bit[ MATCH_BIT ],
+                              STRNUM[ RTPC_RES_STR ].bit[ MATCH_BIT ], 
+                              STRNUM[ RTPC_RES_STR ].bit[ VALID_BIT ];
+
+If ( Z ) jmp  SKIP_RTPC_INIT;
+//RTPC structure result + F_PR indication , we need 1 clock to grub bit 12 of ENC_PRI
+    Sub ALU , UREG[2] , 3 , 1 ,   MASK_00000003 , MASK_SRC1; 
+    //set default disable 
+    movBits RTPC_IS_ENABLED_BIT, 0, 2;  //set to 0 both RTPC_IS_ENABLED_BIT and  RTPC_IS_DOUBLE_COUNT_BIT        
+
+
+If ( !Z )  jmp  SKIP_RTPC_INIT;
+    //bits 2-0 l4 type 
+    GetRes ALU, EXTERNAL_HEADER_TYPE_RTPC(MSG_STR), 1 ;  // get real offset to counter 
+    Decode ALU , ALU , 1 , MASK_00000007 , MASK_SRC1; 
+    
+GetRes uqTmpReg4, 1(RTPC_RES_STR), 4;
+
+#define L4PRT_UDP_RES 5
+#define L4PRT_TCP_RES 1
+#define IP_RTPCICMP_RES   7
+#define NW_UDP_ANY        5
+
+MovBits ENC_PRI.bit[13] , ALU.bit[1] , 3;
+
+jmul RTPCICMP,RTPCUDP,RTPCTCP,NO_NOP;        
+    MovMul IP_RTPCICMP_RES,L4PRT_UDP_RES ,L4PRT_TCP_RES;
+    GetRes uqTmpReg5 ,7(RTPC_RES_STR), 3; //7-3bit ICMP , 3-0 bit other
+    
+RTPCOTHER:
+   jmp FINAL_RTPC_RES;        
+        Mov uqTmpReg3.byte[0] , uqTmpReg5.byte[1]  , 1;
+        Nop;
+    
+
+RTPCUDP:
+GetRes uqTmpReg4.byte[2] , NW_UDP_ANY(RTPC_RES_STR), 2;
+
+RTPCTCP:
+Mov RMEM_OFFSET , ENC_PRO , 2;
+Mov ALU , 0 , 4;
+Nop;
+GetRes  uqTmpReg1 ,RMEM_OFFSET(L4SRCPRT_STR)+  ,2;
+If (!UREG[2].bit[3])  Mov  uqTmpReg1 , ALU , 4;
+
+GetRes  uqTmpReg2.byte[0] ,RMEM_OFFSET(L4DSTPRT_STR)  ,2;
+If (!UREG[2].bit[2])  Mov  uqTmpReg2 , ALU , 4;
+
+//inputs:
+    //UREG[1] bit[3 L4SRC MATCH,2 L4DSTMATCH]
+    //uqTmpReg4 [byte 3 TCP/UDP any dport mask , 2  TCP/UDP any sport mask, byte 1-0 fw-bw]  
+    //uqTmpReg1 [byte 0-1 TCP/UDP fw-bw ] L4SRC res
+    //uqTmpReg2 [byte 2-3 TCP/UDP fw-bw ] L4DST res
+    //ALU uqTmpReg3 temporary
+    //output uqTmpReg3.byte[0]
+    And uqTmpReg3.byte[0] , uqTmpReg1.byte[0] ,uqTmpReg4.byte[0] ,2; //fwd_nw & fwd_sport  and  bwd_nw & bwd_sport    
+    Or uqTmpReg5.byte[3] , uqTmpReg1.byte[0] , uqTmpReg2.byte[0] , 1; ////fwd_sport | fwd_dport    
+    And uqTmpReg3.byte[2] , uqTmpReg2.byte[0] ,uqTmpReg4.byte[0] ,2; //fwd_nw & fwd_dport  and  bwd_nw & bwd_dport
+    Nop;
+    Or  ALU.byte[0] , ALU.byte[0] , uqTmpReg3.byte[3], 1;  // dport_fwd | dport_bkwd 
+
+    Or  uqTmpReg3.byte[2] , ALU.byte[0] , uqTmpReg4.byte[3] , 1; //  dport_fwd | dport_bkwd  | dport_any
+
+    Or ALU , uqTmpReg3.byte[0] ,uqTmpReg3.byte[1] ,1; //sport_fwd | sport_bkwd 
+    Or ALU , ALU , uqTmpReg4.byte[2] , 1; //  sport_fwd | sport_bkwd  | sport_any
+    And uqTmpReg3.byte[0] , ALU , uqTmpReg3.byte[2] , 1;
+
+    jmp FINAL_RTPC_RES;
+        Or ALU,uqTmpReg5.byte[3] , uqTmpReg5.byte[2] , 1;   //(l4_table_match_rule | udp_fwd_sport | udp_fwd_dport)   
+        And uqTmpReg3.byte[0] , ALU , uqTmpReg3.byte[0]  , 1; 
+
+RTPCICMP:
+    Nop;
+    MovBits uqTmpReg3.byte[0] , uqTmpReg5.byte[0]  , 1;
+
+
+FINAL_RTPC_RES:
+    mov uxEthTypeMetaData,RTPC_MATCH_DEFAULT, 2;  //instead of nop
+    And byRTPCFlags,  uqTmpReg3.byte[0] , uqTmpReg6 ,1;
+    Nop;
+    If (!Z) movbits RTPC_IS_ENABLED_BIT , 1, 1;
+
+
+SKIP_RTPC_INIT:
+
+   
 //look for Access list results
 
 xadAccessListResolve FRAME_BYPASS_HOST_LAB, 
-                     FRAME_BYPASS_NETWORK_LAB,
+                     FRAME_BYPASS_NETWORK_TRANSPARENT_LAB,
                      BDOS_OOS_PERFORM_LAB,
                      FRAME_DROP_LAB,
                      FRAME_TP_BYPASS_2NETW_LAB, 
                      FRAME_DROP_LAB;
 
-jmp SYN_PROT_LAB, NOP_2;  
 //anyway jump to policy
-//jmp BDOS_OOS_PERFORM_LAB, NOP_2;
+jmp BDOS_OOS_PERFORM_LAB, NOP_2;
 
                       
 
@@ -298,97 +376,249 @@ jmp SEND_PACKET_LAB_CPU, NO_NOP;
 FRAME_BYPASS_CPU_2NETWORK_LAB:
 EZstatIncrByOneIndexImm  GS_TRL_IN_RCV; //increment number of internal packets received on TOP Resolve   
 
-Mov byFrameActionReg, FRAME_HOST_BYPASS_2NETW, 1; //set action bypass to network
+If (bitRSV_isRoutingMode) jmp SKIP_FFT_FROM_HOST_HARDCODED_LAB , NOP_2;
+copy KMEM_RSV2SRH2_FFT_KEY_OFF( HW_OBS ),  MSG_SWITCH_VLAN_FROM_HOST(MSG_STR), 2; 
 
-copy KMEM_RSV2SRH2_FFT_KEY_OFF( HW_OBS ),  MSG_SWITCH_VLAN_FROM_HOST(MSG_STR), 2;
+SKIP_FFT_FROM_HOST_HARDCODED_LAB:
 
-// Check for Policy Update status
-/*
-Xor ALU, ALU, !ALU, 4, GC_CNTRL_1_MREG, MASK_BOTH;    // getRes MREG Value
-Nop;
-Movbits ALU.bit[MSG_CTRL_TOPPRS_0_JUMBO_STATUS_BIT], ALU.bit[GC_CNTRL_1_UPD_POL_STATUS_BIT], 1;    // Set Update Policies status
-Or byTempCondByte, ALU.byte[0], byCtrlMsgPrs0, 1;
- ???? - Risky */
-PutHdr HREG[ 0 ], RSV_MSG_HDR;
-// -- Risky MovBits byCtrlMsgRsv0.bit[MSG_CTRL_TOPRSV_0_RTM_GLOB_BYPASS_BIT], 1, 1;   
-
-// RT monitoring receive counters update
-// rtmCountersUpdate RT_MONITOR_BASE_CNTR; 
-// RT monitoring drop counters update
-#if !GLOBAL_RTM_IN_TOP_MODIFY
-jmp rtmCountersUpdate_LAB, NO_NOP;
-   Mov PC_STACK, RT_DONE_TO_NW_LAB, 2;
-   MovBits byGlobalStatusBitsReg.bit[RTM_RECIVE_DROP_IND_BIT], 1, 1;  
-#endif
-
-RT_DONE_TO_NW_LAB:
-
-vardef regtype uqRSV_INDIRECT_CTX_LOAD    INDIRECT_CTX_LOAD.byte[0:1];  // INDIRECT_CTX_LOAD register (UREG[12]): bits 8:15 (ignore_rdy_bits) part of this register should always be zero in order to assure that TOPmodify will start ONLY when the relevant context lines marked in bits 7:0 (load_context_bitmap) part of the register are valid.
-
-movbits $uqRSV_INDIRECT_CTX_LOAD , byTemp3Byte0 , 3;
-nop;   
-PutKey MSG_CTRL_TOPRSV_0_OFF(HW_OBS), byCtrlMsgRsv0, 2;  // Writing 2 ctrl bytes (byCtrlMsgRsv0 and byCtrlMsgRsv1) in 1 operation
-
-varundef uqRSV_INDIRECT_CTX_LOAD;
-//Finish handling with non search and jump to the next stage (TOPmodify) 
-halt UNIC,
-     HW_MSG_HDR,
-     IND_LD_CTX;
-
-
+jmp SEND_PACKET_LAB_CPU, NO_NOP;    
+   Mov byFrameActionReg, FRAME_HOST_BYPASS_2NETW, 1; //set action bypass to network
+   Mov byCtrlMsgRsv0 , byCtrlMsgPrs0 , 1;
 
 
 // Valid for bypass to network              
 SEND_PACKET_LAB:
-SEND_TO_CPU: 
+Indirect SEND_TO_CPU: 
     
-PutHdr HREG[ 0 ], RSV_MSG_HDR;
+
+//aaaaaaaaaaaaaaaaa
 //PutHdr HREG[ 1 ], RSV_FFT_VID_LKP_HDR; // TODO_OPTIMIZE: May save a lookup (!) and some more code: maybe the whole lookup may be skipped in routing mode. if so need to cancel the vould key, the lookup in TOPsearch and the code in TOPmodify. before doing that check that the code is not needed in transparent mode, and check that the lookup result is not needed for any other purpose.
 
 
-jmp DONE_LAB, NOP_2;
+jmp DONE_LAB;
+    PutHdr HREG[ 0 ], RSV_MSG_HDR;
+    Nop;
 
 
 // The following copies the message from TOPparse and places the external VLAN tag for TOPsearch-II lookup 
 Indirect SEND_PACKET_LAB_CPU:
-COMMON_END:
+
+   // Check if packet is GRE keepalive
+   GetRes uqTmpReg3.byte[0], MSG_GLOB_CONFIG_OFF(MSG_STR), 1;// Get Message
+
 // Check for Policy Update status
 Xor ALU, ALU, !ALU, 4, GC_CNTRL_1_MREG, MASK_BOTH;    // getRes MREG Value
-Nop;
+//Nop;
+   MovBits byGlobalStatusBitsReg.bit[GRE_KEEPALIVE_BIT], uqTmpReg3.byte[0].bit[MSG_GLOB_CONFIG_GRE_KEEPALIVE], 1; // Get keepalive bit
 Movbits ALU.bit[MSG_CTRL_TOPPRS_0_JUMBO_STATUS_BIT], ALU.bit[GC_CNTRL_1_UPD_POL_STATUS_BIT], 1;    // Set Update Policies status
+
+   // NO BYPASS NW for keepalive packets
+   If (byGlobalStatusBitsReg.bit[GRE_KEEPALIVE_BIT]) jmp DONE_LAB, NO_NOP;
 Or byTempCondByte, ALU.byte[0], byCtrlMsgPrs0, 1;
 PutHdr HREG[ 0 ], RSV_MSG_HDR;
 
 //check jumbo flags and Policy Update status
-If (!byTempCondByte.bit[MSG_CTRL_TOPPRS_0_JUMBO_STATUS_BIT]) jmp DONE_LAB , NOP_2;
+
+    If (!byTempCondByte.bit[MSG_CTRL_TOPPRS_0_JUMBO_STATUS_BIT]) jmp SEND_PACKET_LAB;
+        Mov UREG[2].byte[3] , byFrameActionReg , 1;  
+        GetRes byTempCondByte,  MSG_CTRL_TOPPRS_2_OFF(MSG_STR), 2;   // both byCtrlMsgPrs0 and byCtrlMsgPrs1 are initilized here        
+
+If (UREG[2].byte[3].bit[FRAME_HOST_BYPASS_2NETW_BIT]) jmp SEND_PACKET_LAB , NOP_2;
+    If (byTempCondByte.bit[MSG_CTRL_TOPPRS_LACP_TYPE_BIT]) jmp SEND_PACKET_LAB , NOP_2;
+
 
 MovBits byCtrlMsgRsv0.bit[MSG_CTRL_TOPRSV_0_RTM_GLOB_BYPASS_BIT], 1, 1;   
 Mov byFrameActionReg, FRAME_BYPASS_NETWORK, 1;
 
 
-PutHdr HREG[ COM_HBS ], RSV_FFT_ALST_LKP_HDR;
-Copy KMEM_OFFSET ( HW_OBS ),  MSG_VIF_OFF(MSG_STR), 1;
-MovBits byTemp3Byte0.bit[CTX_LINE_OUT_IF]  , 1 , 1;
-Add KMEM_OFFSET , KMEM_OFFSET , RSV_FFT_RX_COPY_PORT_LKP_KEY_SIZE_KMEM_ALIGN , 1;
+if (!bitRSV_isRoutingMode) jmp FFT_TABLE_TXCOPY_END1_LAB ;
+   PutHdr HREG[ COM_HBS ], RSV_FFT_ALST_LKP_HDR;
+   Copy KMEM_OFFSET ( HW_OBS ),  MSG_VIF_OFF(MSG_STR), 1;
+
+GetRes uqTmpReg6 , 0(INT_TCAM_STR), 3 ;
+PutHdr HREG[ COM_HBS ], RSV_ROUTE_ALST_LKP_HDR;
+and ALU, uqTmpReg6.byte[1], uqTmpReg6.byte[1] , 2, MASK_000007FF, MASK_BOTH;    
+Nop;
+PutKey KMEM_OFFSET ( HW_OBS ),  ALU, 2;
+
+MovBits byTemp3Byte0.bit[CTX_LINE_ROUTING_TABLE_RSLT] , 1 , 1; 
+
+FFT_TABLE_TXCOPY_END1_LAB:
+
+//aaaaaaaaaaaaaaaaaaaaaaaaaaa
+//Copy  MSG_HASH_CORE_OFF(MSG_STR), 1;
+//Copy KMEM_OFFSET ( HW_OBS ),  MSG_HASH_CORE_OFF(MSG_STR), 1;
+//Add  KMEM_OFFSET , KMEM_OFFSET , 3 , 1;
+Add COM_HBS  , COM_HBS ,  1 , 1;
+//GetRes  ALU , MSG_HASH_CORE_OFF(MSG_STR), 1;
+//PutKey 3(HW_OBS) , ALU , 2;
+//Copy KMEM_OFFSET ( HW_OBS ),  MSG_HASH_CORE_OFF(MSG_STR), 1;
+
+
+jmp  SEND_PACKET_LAB, NO_NOP;
+    MovBits byTemp3Byte0.bit[CTX_LINE_OUT_IF]  , 1 , 1;    
+    Add KMEM_OFFSET , KMEM_OFFSET , RSV_FFT_RX_COPY_PORT_LKP_KEY_SIZE_KMEM_ALIGN , 1;
 
 DONE_LAB: 
   
 // RT monitoring receive counters update
 // rtmCountersUpdate RT_MONITOR_BASE_CNTR; 
 // RT monitoring drop counters update
-#if !GLOBAL_RTM_IN_TOP_MODIFY
+
 jmp rtmCountersUpdate_LAB, NO_NOP;
    Mov PC_STACK, RT_DONE_LAB, 2;
    MovBits byGlobalStatusBitsReg.bit[RTM_RECIVE_DROP_IND_BIT], 1, 1;  
-#endif
+
 
 indirect RT_DONE_LAB:
 
 
+/* ----------------------------------------------------------------------------------------------------  */
+/* Routing Table Lookup invoke: should be performed if in routing mode and frame is destined to network. */
+/* ----------------------------------------------------------------------------------------------------  */
+if (!bitRSV_isRoutingMode) jmp AFTER_ROUTING_TABLE_INDEX_RESULT_CHECK_LAB, NOP_2;
+
+// Check according to byFrameActionReg that packet is destined to network (and not to the host).
+// According to Guy when sending to network frameAction should be any of (FRAME_BYPASS_NETWORK | FRAME_HOST_BYPASS_2NETW | FRAME_CONT_ACTION),
+// and it is assured that if frameAction is any of these - the frame is not destined to the host.
+and ALU, byFrameActionReg, (FRAME_BYPASS_NETWORK | FRAME_HOST_BYPASS_2NETW), 1;
+nop;
+jz AFTER_ROUTING_TABLE_INDEX_RESULT_CHECK_LAB, NOP_2;
+
+
+/* This is Routing mode and frame is destined to the network.
+   Check the result for the routiung table TCAM:
+     -> In case of no match, halt and discard.
+     -> In case of match, invoke the lookup from TOPsearch 2 for the routing table entry using the routingTableIndex result. */
+
+//vardef regtype by3RSV_routingTableIndexResultRank uqRSV_TempCTX_REG6.BYTE[0:2];
+//vardef regtype byRSV_routingTableIndexResultCtrls uqRSV_TempCTX_REG6.BYTE[3];
+
+//GetRes $byRSV_routingTableIndexResultCtrls, 0(INT_TCAM_STR), 1;
+//GetRes $by3RSV_routingTableIndexResultRank, 1(ROUTING_TABLE_INDEX_STR), 3;
+GetRes uqTmpReg6 , 0(INT_TCAM_STR), 3 ;
+Nop;
+/* Verify for the lookup that was done that this is a valid, match, and single match result.
+   Note: This will have to be modified when multiple concurent TCAM lookups will be implemented. */
+Sub ALU, uqTmpReg6.byte[0], 0x51, 1; // check match from the TCAM lookup, with support future enhancement for concurrent parallel lookups.
+Nop;
+//sub ALU, ALU, 0x51, 1;
+   //and ALU, $by3RSV_routingTableIndexResultRank, $by3RSV_routingTableIndexResultRank, 3, MASK_000007FF, MASK_BOTH;//nop; // take only the 11 LSbits (which represent 2K results (1K + 1K for active and inactive values - double buffer)) for the rank, and mask the higher bits from the returned result.
+
+#pragma EZ_Warnings_Off; // disable data hazard pragma - the tested flag status is for older then previous ALU command, not the last ALU command.
+if (FLAGS.bit[F_ZR]) jmp RSV_AFTER_CHECK_ROUTING_TABLE_INDEX_MATCH_LAB;
+    and ALU, uqTmpReg6.byte[1], uqTmpReg6.byte[1] , 2, MASK_000007FF, MASK_BOTH;    
+    Nop;
+
+#pragma EZ_Warnings_On;
+EZstatIncrByOneIndexImm  ROUTING__L_CNTR__ROUTING_TABLE_INDEX_NO_MATCH;
+jmp FRAME_DROP_LAB;
+    MovBits RTPC_IS_ENABLED_BIT , 0 , 1;
+    nop;
+
+RSV_AFTER_CHECK_ROUTING_TABLE_INDEX_MATCH_LAB:
+
+
+// TCAM Match: The rank (index) is now located in by3RSV_routingTableIndexResultRank. use it to invoke lookup from TOPsearch 2 in the rouing table
+//PutHdr HREG[ COM_HBS ], RSV_ROUTING_TABLE_LKP_HDR;
+
+//set routing table search enable in case 
+MovBits byTemp3Byte0.bit[CTX_LINE_ROUTING_TABLE_RSLT]  , 1 , 1; 
+
+// Populate the TOPsearch2 RoutingTable key
+//PutKey  KMEM_OFFSET (HW_OBS), ALU, 2;
+
+//Add COM_HBS , COM_HBS , 1 , 1;
+//Add KMEM_OFFSET , KMEM_OFFSET , RSV_ROUTING_LKP_KEY_SIZE_KMEM_ALIGN , 1;
+
+//varundef by3RSV_routingTableIndexResultRank;
+//varundef byRSV_routingTableIndexResultCtrls;
+
+
+AFTER_ROUTING_TABLE_INDEX_RESULT_CHECK_LAB:
+
 TOP_RESOLVE_TERMINATION_LAB:
-PrepareRsvMsg;
+
+/***
+store the ethertype for metadata (RTPC) 
+intersect with uqRSV_INDIRECT_CTX_LOAD, therefore should be store before the macro.
+set the counter
+*/
+movbits  byRTPCPolicyFlags.bit[0] ,  byRTPCFlags.bit[0],  5;
+movbits  byRTPCPolicyFlags.bit[7] ,  RTPC_IS_ENABLED_BIT, 1;
+#ifndef RTPC_DEBUG_COUNTERS
+Nop;
+#else
+Movbits ALU, uxEthTypeMetaData.bit[7],5,RESET;
+#endif //RTPC_DEBUG_COUNTERS
+
+PutKey MSG_METADATA_RTPC_VAL(HW_OBS), byRTPCPolicyFlags, 1;
+If (RTPC_IS_ENABLED_BIT) //RTPC is set
+   jmp  TOP_RESOLVE_RTPC_COUNTER, NO_NOP; 
+      Mov uqTmpReg3, RTPC_FILTER_CNTR_BASE, 1;
+      MovBits uxEthTypeMetaData.bit[0], byRTPCFlags.bit[0], 5; //filter set
+       
+//RTPC is not set
+jmp  TOP_RESOLVE_TERMINATION_AFTER_RTPC, NOP_1;
+   mov uxEthTypeMetaData,RTPC_STANDART_ETH_TYPE, 2;  
+
+
+TOP_RESOLVE_RTPC_COUNTER:
+
+#ifdef RTPC_DEBUG_COUNTERS
+Mov uqTmpReg7,RTPC_POSTED_DEBUG_CNTR_BASE,4;
+Nop;
+Add ALU,ALU,uqTmpReg7,4;
+Nop;
+//update counter                                        
+EZstatPostedLongIncrIndex  ALU , 1;
+#endif
+
+   //need only 5b , will return offset of the set the msb
+   Encode byTemp3Byte3, byRTPCFlags, 1;
+
+TOP_RESOLVE_RTPC_COUNTER_LOOP: 
+Nop;
+JZ  TOP_RESOLVE_TERMINATION_AFTER_RTPC, NO_NOP;
+   Add uqTmpReg3, uqTmpReg3, byTemp3Byte3, 1;
+   //clear the msb  
+   Decode ALU, byTemp3Byte3, 1;   
+   
+Xor byRTPCFlags, byRTPCFlags, ALU, 1;
+
+If (RTPC_IS_DOUBLE_COUNT_BIT) //RTPC double
+   jmp  TOP_RESOLVE_RTPC_DOUBLE_COUNTER, NOP_2;       
+//update counter                                        
+EZstatIncrIndexReg  uqTmpReg3 , 1;           
+
+jmp TOP_RESOLVE_RTPC_COUNTER_LOOP, NO_NOP;
+   Mov uqTmpReg3, RTPC_FILTER_CNTR_BASE, 1;
+   Encode byTemp3Byte3, byRTPCFlags, 1;
+TOP_RESOLVE_RTPC_DOUBLE_COUNTER:
+//update counter                                        
+EZstatIncrIndexReg  uqTmpReg3 , 2;  
+#ifdef RTPC_DEBUG_COUNTERS
+Mov uqTmpReg7,RTPC_POSTED_DEBUG_CNTR_BASE,4;
+Mov ALU, 0x04, 2; 
+Nop;
+Add ALU,ALU,uqTmpReg7,4;
+Nop;
+//update counter                                
+EZstatPostedLongIncrIndex  ALU , 1;        
+#endif         
+jmp TOP_RESOLVE_RTPC_COUNTER_LOOP, NO_NOP;
+   Mov uqTmpReg3, RTPC_FILTER_CNTR_BASE, 1;
+   Encode byTemp3Byte3, byRTPCFlags, 1;
+
+
+TOP_RESOLVE_TERMINATION_AFTER_RTPC:
+PutKey MSG_METADATA_ETH_TYPE_VAL(HW_OBS), uxEthTypeMetaData, 2;
+
+Mov INDIRECT_CTX_LOAD, 0, 2;
+PrepareRsvMsg;         
 
 //Finish handling with non search and jump to the next stage (TOPmodify) 
+
 halt UNIC,
      HW_MSG_HDR,
      IND_LD_CTX;
@@ -417,16 +647,213 @@ BDOS_OOS_PERFORM_LAB:
 #define  P_DIP_STR      RMEM_BASE0;
 #define  P_VLAN_STR     RMEM_BASE1;
 #define  P_PORT_STR     RMEM_BASE1;
+#define  uqBdosTempReg  UREG[2];      // 4 bytes
+#define  uqTempReg      uqTmpReg5;    // 4 bytes
 
-   Mov uqTmpReg1, 0, 4;
-   //Mov HW_OBS,    0, 1;
 
-Movbits byGlobalStatusBitsReg.bit[POLICY_PHASE_BIT], 0, 1; // Set policy phase 0
+GetRes uqTmpReg2, { POLICY_HW_ID_OFF }(POLICY_RES_CONF_STR), 2 ;
+GetRes uqGlobalStatusBitsReg, { RMEM_POLICY_WORD_1 }(POLICY_RES_CONF_STR) , 4 ;
 
-if (byCtrlMsgPrs0.bit[MSG_CTRL_TOPPRS_0_ANALYZE_POLICY_BIT]) jmp ANALYZE_POLICY, NO_NOP;
-   GetRes uqBdosL4ValidBitsReg, SIGNA_CNTRL_RES_OFF(BDOS_ATTACK_RESULTS_L23_2_STR), 4;
-   nop;
+SHL ALU , uqTmpReg2 , 2, 2;//ALU = POLICY_HW_ID * 4
+Sub ALU , ALU , uqTmpReg2 , 2;//ALU = POLICY_HW_ID * 3
+SHL uqTempReg , ALU , 5 , 4 ; //uqTempReg = POLICY_HW_ID * 3 *32
+xor uqBdosTempReg, ALU, !ALU, 4, GC_CNTRL_1_MREG, MASK_BOTH; // get GC_CNTRL_1_MREG, for BDoS phase (statistical counters phase)
 
+Nop;
+If(!uqBdosTempReg.bit[GC_CNTRL_1_BDOS_ACTIVE_BIT])  jmp BDOS_PHASE0 ;
+    Mov ALU , BC_BASE , 4 ;  
+    Nop;
+       
+Mov ALU ,  BC_S0G0S1_SEL  , 4;
+
+#undef  uqBdosTempReg;
+#define bySigNum                   bySigNumTmpStorage; // 1 byte, defines signature num
+#define uqAllSignaToInspectBitmask UREG[2];
+#define uqAllNegativeSignaBitmask  uqTmpReg3;
+#define uqSignaPolicyBase          uqRSV_TempCTX_REG6; // 4 bytes
+
+BDOS_PHASE0:
+
+//GetRes uqBdosL4ValidBitsReg, { 8 }(POLICY_RES_CONF_STR), 4;
+
+//ALU has BC_BASE or BC_S0G0S1_SEL according to phase
+Add uqSignaPolicyBase , uqTempReg , ALU , 4; //uqSignaPolicyBase = BC_BASE + POLICY_HW_ID * 3 *32  (or BC_S0G0S1_SEL if phase 1)(A.K.A POLICY_SIGNATURES_BASE)
+
+if (!byCtrlMsgPrs0.bit[MSG_CTRL_TOPPRS_0_ANALYZE_POLICY_BIT]) jmp POLICY_DEFAULT_ACTION_LAB, NO_NOP;//if "don't alayze policy" - jmp to default action
+   GetCtrlBits ALU, STRNUM[ POLICY_RES_CONF_STR ].bit[ MATCH_BIT ],STRNUM[ POLICY_RES_CONF_STR ].bit[ MATCH_BIT ], 
+                    STRNUM[ POLICY_RES_CONF_STR ].bit[ VALID_BIT ],STRNUM[ POLICY_RES_CONF_STR ].bit[ VALID_BIT ] ;
+   Sub ALU , ALU , 7 , 1 , MASK_00000007 , MASK_SRC1 ;//check policy MATCH_BIT and VALID_BIT    
+
+
+GetRes bytmp0, { POLICY_RTPC_FILTERS_BITMAP_OFF }(POLICY_RES_CONF_STR), 1;
+MovBits ALU, uqGlobalStatusBitsReg.bit[POLICY_CNG_ACTION_BIT], 2;//ALU <- policy 2 action bits
+MovBits byRTPCPolicyFlags.bit[0] , bytmp0.bit[0], 5;
+
+   
+JNZ POLICY_DEFAULT_ACTION_LAB; //no match in policy
+    decode ALU, ALU, 1, MASK_00000003, MASK_SRC1;//ALU <- decoded action 
+    GetRes uqTmpReg6, { POLICY_UID_OFF }(POLICY_RES_CONF_STR), 2;  // Save policy id in message to be used for Host metadata addition in TOPmodify
+
+MovBits ENC_PRI.bit[13], ALU.bit[0], 4;//ENC_PRI[16-13] = decoded action (only ALU bits 0-3 may be '1')      
+
+//policy match 
+//read the result from policy STR, field POLICY_RTPC_FILTERS_BITMAP
+//AND with the RTPC result and MREG bits 0-4
+//If match - set the uxRTPCFlags
+#ifdef RTPC_HARDCODE_ENABLE
+MovBits byRTPCPolicyFlags.bit[0] , 0x1F, 5;
+Nop;
+#endif RTPC_HARDCODE_ENABLE
+       
+And ALU, byRTPCFlags, byRTPCPolicyFlags, 1;
+Nop;
+//if not zero no need to mark since it is already marked as RTPC_MATCH_DEFAULT (legit and process)
+// if zero it means that we should return it to un marked, RTPC_STANDART_ETH_TYPE (0x8100)
+JNZ RTPC_POLICY_CONT, NOP_1;
+   MovBits byRTPCFlags, ALU, 5;
+  
+   JMP RTPC_POLICY_DONE, NO_NOP;
+   //if not zero, it means we have at least one enable and match, set the bit of IsRTPCMatchEnable;             
+   mov uxEthTypeMetaData,RTPC_STANDART_ETH_TYPE, 2;   
+   movbits RTPC_IS_ENABLED_BIT , 0, 1;
+
+RTPC_POLICY_CONT:
+
+   mov uxEthTypeMetaData,RTPC_MATCH_DEFAULT, 2;   
+  
+   //if not zero, it means we have at least one enable and match, set the bit of IsRTPCMatchEnable;             
+   movbits RTPC_IS_ENABLED_BIT , 1, 1;
+
+RTPC_POLICY_DONE:
+
+
+MovBits uqTmpReg6.bit[9], 0xf , 4;
+
+// Bypass policy action and send frame to CPU in case "Packet Anomalies" instructed sending to CPU after policy lookup
+if (byTempCondByte1.bit[FRAME_BYPASS_HOST_BIT]) jmp SEND_PACKET_LAB_CPU, NO_NOP;        
+   //signature bitmask of controller for this policy(from lksd). 
+   //The set bit are the local signatures id to be compared with results
+   GetRes uqAllSignaToInspectBitmask, { 0x18 }(POLICY_RES_CONF_STR), 4 ;
+   GetRes uqAllNegativeSignaBitmask, {POLICY_ALL_NEGETIVE_SIGNATURES}(POLICY_RES_CONF_STR) , 4;
+//read bdos result
+GetRes byTempCondByte2 , 0x16(POLICY_RES_CONF_STR) , 1;
+
+//according to "US33814 Traffic Filters non-matched design v2_0.docx" Fig.1
+Mov uqTempReg,uqAllSignaToInspectBitmask,4;
+Or uqAllSignaToInspectBitmask,uqAllSignaToInspectBitmask,uqAllNegativeSignaBitmask,4;//uqAllSignaToInspectBitmask |= uqAllNegativeSignaBitmask
+Not uqTempReg,4;//uqTempReg = not(uqAllSignaToInspectBitmask)
+//skip counter read for policy only path ( see TS )
+    Nop;
+    And uqAllNegativeSignaBitmask,uqAllNegativeSignaBitmask,uqTempReg,4;//uqAllNegativeSignaBitmask &= not(uqAllSignaToInspectBitmask)
+
+#undef uqTempReg;
+
+Encode bySigNum , uqAllSignaToInspectBitmask , 4;//bySigNum = number of highest priority signature (from signature bitmask)
+
+If (byTempCondByte2.bit[1])  jmp SKIP_CNTR; 
+   SHL ALU , ALU , 2 , 4;//ALU = highest priority signature * 4
+   Sub ALU , ALU , bySigNum , 4;//ALU = highest priority signature * 3
+
+//wait for interface ready
+EZwaitFlag F_ST;
+
+//prepare for AnalyzeBdosResult  - read policy bdos first signature 
+Add SREG_LOW [9] ,  uqSignaPolicyBase , ALU , 4;//SREG_LOW [9] = POLICY_SIGNATURES_BASE(see above) + highest priority signature * 3
+movbits    SREG_LOW [1].BYTE [2], ((0x2E << offset_bit(EZstat_StsCmd.bitsOpcode)) | ( 0 << offset_bit(EZstat_StsCmd.bitCtxEnable)) | ( 0 << offset_bit(EZstat_StsCmd.bitsCtxOffset))),     offset_bit(EZstat_StsCmd.bitsReserved_11);
+Mov uqTmpReg9, SREG_LOW [9], 4;                          //Update register = First executed Signature base
+SKIP_CNTR:
+
+
+Jmul POLICY_ACTION_BYPASS_LAB,       // Bypass to network after policy handling
+     SYN_PROT_LAB,                   // Continue with frame flow (SYN Protection) after policy handling
+     POLICY_ACTION_DROP_LAB , NO_NOP;         // Drop frame after policy handling
+    Mov uxGlobalPolIdx, uqTmpReg2.byte[0], 2;          // Policy index storage is only 16 bits length
+    PutKey MSG_POLICY_ID_OFF(HW_OBS) , uqTmpReg6, 2;
+
+    //Copy MSG_POLICY_ID_OFF(HW_OBS), { POLICY_UID_OFF }(POLICY_RES_CONF_STR), 2;  
+    
+
+// Send frame to CPU after policy handling or default policy continue handling
+DEFAULT_POLICY_ACTION_CONTINUE_LAB:
+jmp POLICY_ACTION_SEND_TO_CPU_LAB , NOP_2;
+
+// Continue with frame flow (SYN Protection) after default policy handling
+//DEFAULT_POLICY_ACTION_CONTINUE_LAB:
+//jmp rtmCountersExcludeUpdate_LAB /*SYN_PROT_LAB, NOP_1*/;
+//   Mov PC_STACK, SYN_PROT_LAB, 2;
+//   MovBits byGlobalStatusBitsReg.bit[POLICY_CONT_ACT_BIT], 1, 1;
+
+
+
+// Drop frame after default policy handling
+DEFAULT_POLICY_ACTION_DROP_LAB:
+DEFAULT_POLICY_ACTION_ERROR_LAB:
+//if RTPC is set, should mark
+If (RTPC_IS_ENABLED_BIT) Mov uxEthTypeMetaData, RTPC_POLICY_EXC_DROP , 2;
+jmp rtmCountersExcludeUpdate_LAB, NO_NOP;      //update exclude rtm counters drop , none supported yet
+    Mov PC_STACK, FRAME_DROP_LAB, 2;
+    MovBits byGlobalStatusBitsReg.bit[RTM_RECIVE_DROP_IND_BIT], 0, 1;  //update recive counters only
+
+
+
+
+// Bypass to network after default policy handling
+/*
+DEFAULT_POLICY_ACTION_BYPASS_LAB:
+jmp rtmCountersExcludeUpdate_LAB, NO_NOP;      //update exclude rtm counters recive
+    Mov PC_STACK, FRAME_BYPASS_NETWORK_LAB, 2;
+    MovBits byGlobalStatusBitsReg.bit[RTM_RECIVE_DROP_IND_BIT], 1, 1;  //update recive counters only
+*/
+
+DEFAULT_POLICY_ACTION_BYPASS_LAB:
+//if RTPC is set
+If (RTPC_IS_ENABLED_BIT)  Mov uxEthTypeMetaData, RTPC_POLICY_EXC_BYPASS , 2;
+
+if (!bitRSV_isRoutingMode) jmp FFT_TABLE_TXCOPY_END2_LAB;
+    PutHdr HREG[ COM_HBS ], RSV_FFT_ALST_LKP_HDR;
+    Copy KMEM_OFFSET ( HW_OBS ),  MSG_VIF_OFF(MSG_STR), 1;
+
+GetRes uqTmpReg6 , 0(INT_TCAM_STR), 3 ;
+PutHdr HREG[ COM_HBS ], RSV_ROUTE_ALST_LKP_HDR;
+and ALU, uqTmpReg6.byte[1], uqTmpReg6.byte[1] , 2, MASK_000007FF, MASK_BOTH;    
+Nop;
+PutKey KMEM_OFFSET ( HW_OBS ),  ALU, 2;
+
+FFT_TABLE_TXCOPY_END2_LAB:
+Add COM_HBS  , COM_HBS ,  1 , 1;
+
+MovBits byTemp3Byte0.bit[CTX_LINE_OUT_IF]  , 1 , 1;
+Add KMEM_OFFSET , KMEM_OFFSET , RSV_FFT_RX_COPY_PORT_LKP_KEY_SIZE_KMEM_ALIGN , 1;
+
+jmp rtmCountersExcludeUpdate_LAB, NO_NOP;      //update exclude rtm counters recive
+    Mov PC_STACK, FRAME_BYPASS_NETWORK_TRANSPARENT_LAB, 2;
+    MovBits byGlobalStatusBitsReg.bit[RTM_RECIVE_DROP_IND_BIT], 1, 1; 
+
+
+
+
+/////////////////////////////////////////////////////////////////////////////////////
+//    Specific Policy Handling (When there is match in Policy classification)
+/////////////////////////////////////////////////////////////////////////////////////
+
+/*
+ANALYZE_POLICY:
+
+
+GetCtrlBits ALU,
+            STRNUM[ POLICY_RES_CONF_STR ].bit[ MATCH_BIT ], 
+            STRNUM[ POLICY_RES_CONF_STR ].bit[ MATCH_BIT ], 
+            STRNUM[ POLICY_RES_CONF_STR ].bit[ VALID_BIT ], 
+            STRNUM[ POLICY_RES_CONF_STR ].bit[ VALID_BIT ] ;   
+
+Sub ALU , ALU , 7 , 1 , MASK_00000007 , MASK_SRC1 ;
+
+GetRes byPolicyValidBitsReg, MSG_POLICY_VALIDATION_BITS_OFF( MSG_STR ), 1;
+
+JZ POLICY_ACTION_LAB;
+    mov byTempCondByte1, byFrameActionReg, 1;
+    Mov ALU, 0, 4;
+*/
 
 /////////////////////////////////////////////////////////////////////////////////////
 //    Default Policy Handling (When there is no match in Policy classification)
@@ -436,135 +863,96 @@ POLICY_DEFAULT_ACTION_LAB:
 
 // GuyE, 20.1.2014: Remove NOPS somehow
 
-//////////////////////////////////////////////////////////////////////////////////
-xor ALU, ALU, !ALU, 4, GC_CNTRL_1_MREG, MASK_BOTH; // Get MREG Value
-Nop;
 
-// Calculate default policy counter index
-Mov     bytmp0, ALU.byte[2], 1;
-Nop;
-decode  ALU, bytmp0, 1, MASK_00000003, MASK_SRC1;
-Nop;
-MovBits ENC_PRI.bit[9], ALU.bit[0], 7;
-
-Mov     ALU, POLICY_CNTR_DEF_POL_BASE, 4;
-MovBits ENC_PRI.bit[12], byCtrlMsgPrs2.bit[MSG_CTRL_TOPPRS_2_PA_SAMPL_BIT], 1;
-Add     ALU, bytmp0, ALU, 4, MASK_00000003, MASK_SRC1;
 //////////////////////////////////////////////////////////////////////////////////
 
 
-EZstatIncrIndexReg ALU, 1;  //increment this
 
-Jmul DEFAULT_POLICY_ACTION_ERROR_LAB,       // Drop frame after default policy handling
-     DEFAULT_POLICY_ACTION_ERROR_LAB,       // Drop frame after default policy handling
-     DEFAULT_POLICY_ACTION_ERROR_LAB,       // Drop frame after default policy handling
-     DEFAULT_POLICY_ACTION_SEND_TO_CPU_LAB, // Send frame to CPU after default policy handling
-     DEFAULT_POLICY_ACTION_BYPASS_LAB,      // Bypass to network after default policy handling
+xor uqTmpReg1, ALU, !ALU, 4, GC_CNTRL_1_MREG, MASK_BOTH; // Get MREG Value
+Mov byTempCondByte2 , byCtrlMsgPrs2Rsv2 , 1; 
+Mov ALU , ALU.byte[2] ,  2 ; 
+decode  ALU ,  ALU , 1 , MASK_00000003 , MASK_SRC1 ;
+Mov uqAllSignaToInspectBitmask , 0 , 4;//Moti: to check - seems not needed
+MovBits ENC_PRI.bit[13] , ALU , 3;
+Mov     ALU.byte[0], POLICY_CNTR_DEF_POL_BASE, 4;
+Add ALU ,  uqTmpReg1.byte[2]  , ALU , 4;
+
+
+
+//MovBits ENC_PRI.bit[12], byCtrlMsgPrs2Rsv2.bit[MSG_CTRL_TOPPRS_2_PA_SAMPL_BIT], 1;
+//special case PA sampling send 2 CPU in any rate 
+
+
+//Add     ALU, bytmp0, ALU, 4, MASK_00000003, MASK_SRC1;
+//////////////////////////////////////////////////////////////////////////////////
+
+
+EZstatIncrIndexReg ALU , 1;  //increment this
+
+//default policy for RTPC
+xor uqTmpReg5, ALU, !ALU, 4, RTPC_FILTER_EN, MASK_BOTH;   // Get MREG Value
+Nop;
+
+And ALU, uqTmpReg5.byte[1], byRTPCFlags, 1;
+Nop;
+//if not zero no need to mark since it is already marked as RTPC_MATCH_DEFAULT (legit and process)
+// if zero it means that we should return it to un marked, RTPC_STANDART_ETH_TYPE (0x8100)
+JNZ RTPC_POLICY_EXCLUSIVE_CONT, NOP_2;
+
+   mov uxEthTypeMetaData,RTPC_STANDART_ETH_TYPE, 2;   
+   
+   //if not zero, it means we have at least one enable and match, set the bit of IsRTPCMatchEnable;             
+   movbits RTPC_IS_ENABLED_BIT , 0, 1;
+
+RTPC_POLICY_EXCLUSIVE_CONT:
+ 
+Jmul DEFAULT_POLICY_ACTION_BYPASS_LAB,      // Bypass to network after default policy handling
      DEFAULT_POLICY_ACTION_CONTINUE_LAB,    // Continue with frame flow (SYN Protection) after default policy handling
-     DEFAULT_POLICY_ACTION_DROP_LAB;        // Drop frame after default policy handling
-     nop;
-     nop;
+     DEFAULT_POLICY_ACTION_DROP_LAB , NO_NOP;        // Drop frame after default policy handling
+     Nop;
+     Nop;
 
 // We should not reach this point!
-jmp DEFAULT_POLICY_ACTION_CONTINUE_LAB, NOP_2;
-
-
-// Drop frame after default policy handling
-DEFAULT_POLICY_ACTION_DROP_LAB:
-DEFAULT_POLICY_ACTION_ERROR_LAB:
-jmp rtmCountersExcludeUpdate_LAB, NO_NOP;      //update exclude rtm counters drop , none supported yet
-    Mov PC_STACK, DEFAULT_POLICY_RTM_DONE_DROP_LAB, 2;
-    MovBits byGlobalStatusBitsReg.bit[RTM_RECIVE_DROP_IND_BIT], 0, 1;  //update recive counters only
-indirect DEFAULT_POLICY_RTM_DONE_DROP_LAB:
-jmp FRAME_DROP_LAB, NOP_2;
-
-
+//jmp DEFAULT_POLICY_ACTION_SEND_TO_CPU_LAB, NOP_2;
 // Send frame to CPU after default policy handling
 DEFAULT_POLICY_ACTION_SEND_TO_CPU_LAB:
+//RTPC- should not change legit+process
 jmp rtmCountersExcludeUpdate_LAB, NO_NOP;      //update exclude rtm counters recive
-    Mov PC_STACK, DEFAULT_POLICY_RTM_DONE_SEND_TO_CPU_LAB, 2;
+    Mov PC_STACK, SEND_PACKET_LAB_CPU, 2;
     MovBits byGlobalStatusBitsReg.bit[RTM_RECIVE_DROP_IND_BIT], 1, 1;  //update recive counters only
-indirect DEFAULT_POLICY_RTM_DONE_SEND_TO_CPU_LAB:
-jmp SEND_PACKET_LAB_CPU, NOP_2;
-
-
-// Bypass to network after default policy handling
-DEFAULT_POLICY_ACTION_BYPASS_LAB:
-
-PutHdr HREG[ COM_HBS ], RSV_FFT_ALST_LKP_HDR;
-Copy KMEM_OFFSET ( HW_OBS ),  MSG_VIF_OFF(MSG_STR), 1;
-MovBits byTemp3Byte0.bit[CTX_LINE_OUT_IF]  , 1 , 1;
-Add KMEM_OFFSET , KMEM_OFFSET , RSV_FFT_RX_COPY_PORT_LKP_KEY_SIZE_KMEM_ALIGN , 1;
-
-jmp rtmCountersExcludeUpdate_LAB, NO_NOP;      //update exclude rtm counters recive
-    Mov PC_STACK, DEFAULT_POLICY_RTM_DONE_BYPASS_LAB, 2;
-    MovBits byGlobalStatusBitsReg.bit[RTM_RECIVE_DROP_IND_BIT], 1, 1;  //update recive counters only
-indirect DEFAULT_POLICY_RTM_DONE_BYPASS_LAB:
-jmp FRAME_BYPASS_NETWORK_LAB, NOP_2;
-
-
-// Continue with frame flow (SYN Protection) after default policy handling
-DEFAULT_POLICY_ACTION_CONTINUE_LAB:
-jmp rtmCountersExcludeUpdate_LAB, NO_NOP;      //update exclude rtm counters recive
-    Mov PC_STACK, DEFAULT_POLICY_RTM_DONE_CONTINUE_LAB, 2;
-    MovBits byGlobalStatusBitsReg.bit[RTM_RECIVE_DROP_IND_BIT], 1, 1;  //update recive counters only
-indirect DEFAULT_POLICY_RTM_DONE_CONTINUE_LAB:
-jmp SYN_PROT_LAB, NOP_1;
-   MovBits byGlobalStatusBitsReg.bit[POLICY_CONT_ACT_BIT], 1, 1;
 
 
 
-/////////////////////////////////////////////////////////////////////////////////////
-//    Specific Policy Handling (When there is match in Policy classification)
-/////////////////////////////////////////////////////////////////////////////////////
+//get policy bitmask
+//policy bitmask structure
+//Features bitmask               - 8 bits
+//PT status per feature bitmask  - 8 bits TBD
+//Sampling status per feature    - 8 bits TBD
+//PA actions per feature (20 according to Ilia design for NG) - 40 bits TBD
 
-ANALYZE_POLICY:
-
-Mov ALU, 0, 4;
-
-
-// Get the match bit from RMEM for policy tree structures
-GetCtrlBits ALU,
-            STRNUM[ POLICY_RES_STR ].bit[ MATCH_BIT ], // ALU.bit 3 - Policy result match bit
-            STRNUM[ POLICY_RES_STR ].bit[ MATCH_BIT ], // ALU.bit 2 - Policy result match bit 
-            STRNUM[ POLICY_RES_STR ].bit[ VALID_BIT ], // ALU.bit 1 - Policy result valid bit
-            STRNUM[ POLICY_RES_STR ].bit[ VALID_BIT ]; // ALU.bit 0 - Policy result valid bit
-
-
-Sub ALU, ALU, 0xF, 1;
-GetRes byPolicyValidBitsReg, MSG_POLICY_VALIDATION_BITS_OFF( MSG_STR ), 1;
-
-jnz POLICY_DEFAULT_ACTION_LAB, NO_NOP; 
-   GetRes uqGlobalStatusBitsReg, POLICY_ACTION_OFFSET( POLICY_RES_STR ),  (POLICY_ACTION_SIZE + POLICY_USER_ID_SIZE);
-   GetRes uqTmpReg2, POLICY_ID_OFFSET( POLICY_RES_STR ), POLICY_ID_SIZE, RESET; // uqTmpReg2 <- policy index (0 - 404)
-
-MovBits ENC_PRI.bit[13], uqGlobalStatusBitsReg.bit[0], 3;
-Nop;
-Jmul POLICY_ACTION_BYPASS_LAB,       // Bypass to network after policy handling
-     SYN_PROT_LAB,                   // Continue with frame flow (SYN Protection) after policy handling
-     POLICY_ACTION_DROP_LAB,         // Drop frame after policy handling
-     NO_NOP;
-     PutKey MSG_POLICY_ID_OFF(HW_OBS), uqGlobalStatusBitsReg.byte[1], 2;  // Save policy id in message to be used for Host metadata addition in TOPmodify
-     Mov uxGlobalPolIdx, uqTmpReg2.byte[0], 2;          // Policy index storage is only 16 bits length
-
-And ALU, uqGlobalStatusBitsReg, 0x8, 1;
-Nop;
-JNZ POLICY_ACTION_SEND_TO_CPU_LAB, NO_NOP;
-
-// We should not reach this point!
-jmp SYN_PROT_LAB, NOP_2;
 
 
 // Drop frame after policy handling
 POLICY_ACTION_DROP_LAB:
 POLICY_ACTION_ERROR_LAB:
-jmp rtmCountersPerPolicyUpdate_LAB, NO_NOP;    //update exclude rtm counters drop, none supported yet
+jmp rtmCountersPerPolicyUpdate_LAB, NO_NOP;    //update exclude rtm counters drop , none supported yet
     Mov PC_STACK, FRAME_DROP_LAB, 2;
     MovBits byGlobalStatusBitsReg.bit[RTM_RECIVE_DROP_IND_BIT], 0, 1;
 
 
 // Send frame to CPU or bypass to network after policy handling
 POLICY_ACTION_BYPASS_LAB:
+    PutHdr HREG[ COM_HBS ], RSV_FFT_ALST_LKP_HDR;
+    Copy KMEM_OFFSET ( HW_OBS ),  MSG_VIF_OFF(MSG_STR), 1;
+ MovBits byTemp3Byte0.bit[CTX_LINE_OUT_IF]  , 1 , 1;
+
+jmp rtmCountersPerPolicyUpdate_LAB, NO_NOP;    //update exclude rtm counters recive
+    Mov PC_STACK, FRAME_BYPASS_NETWORK_LAB, 2;
+    MovBits byGlobalStatusBitsReg.bit[RTM_RECIVE_DROP_IND_BIT], 1, 1;
+
+
+
+AFTER_POLICY:
 POLICY_ACTION_SEND_TO_CPU_LAB:
 jmp rtmCountersPerPolicyUpdate_LAB, NO_NOP;    //update exclude rtm counters recive
     Mov PC_STACK, SEND_PACKET_LAB_CPU, 2;
@@ -572,40 +960,36 @@ jmp rtmCountersPerPolicyUpdate_LAB, NO_NOP;    //update exclude rtm counters rec
 
 
 
-Indirect AFTER_POLICY:
+
 
 //perform global oos result
 //OOS_Perform_Action;
 
-jmp COMMON_END, NOP_2;
-
-RX_COPY_AND_DROP_LAB:
-   Jmp TOP_RESOLVE_TERMINATION_LAB, NOP_1;
-      MovBits byCtrlMsgRsv1.BIT[MSG_CTRL_TOPRSV_2_DELAY_DROP_BIT], 1, 1;
+//jmp SEND_PACKET_LAB_CPU, NOP_2;
 
   
 indirect CONTROL_DISCARD_LAB:
+
+//RTPC should not change JUMBO frame action
+if (byCtrlMsgPrs0.bit[MSG_CTRL_TOPPRS_0_JUMBO_STATUS_BIT]) jmp CONTROL_DISCARD_LAB_CONT, NOP_2;
+
+//if RTPC is set and it is not jumbo frame, send to CPU
+If (RTPC_IS_ENABLED_BIT) //RTPC is set
+   jmp  SEND_PACKET_LAB_CPU, NOP_2; 
+
+
+   /////////////////
+CONTROL_DISCARD_LAB_CONT:
  /*
    Discardtreatment;
    Mov INC_HLN_ORD, 5, 4; 
    Halt     HALT_DISC;
   */
-
-   MovBits byCtrlMsgPrs1.BIT[MSG_CTRL_TOPRSV_2_HAS_RX_COPY_BIT] , byCtrlMsgRsv1.bit[MSG_CTRL_TOPRSV_2_HAS_RX_COPY_BIT] ,1;
-   nop; 
-   if (byCtrlMsgPrs1.BIT[MSG_CTRL_TOPRSV_2_HAS_RX_COPY_BIT])
-      Jmp RX_COPY_AND_DROP_LAB, NOP_2;
-
    /* 2. Recycle and discard the packet. */
    EZrfdRecycleOptimized;
    halt DISC;
 
 
-OOS_SYN_ACK_FR_ACTION:
-    OOS_Preparse_Action POLICY_CNG_OOS_OTHER_ACT_BIT, OS_OTHR_CNT;
-
-OOS_ACK_ACTION:
-    OOS_Preparse_Action POLICY_CNG_OOS_ACK_ACT_BIT,   OS_OTHR_CNT;
 
 
 
@@ -629,28 +1013,46 @@ if (!byTempCondByte1.bit[VALID_BIT]) jmp POLICY_PERFORM_ACTION_LAB, NOP_2;
 // If lookup in SYN_PROT_DEST_STR was performed but no match continue with OOS
 if (!byTempCondByte1.bit[MATCH_BIT]) jmp POLICY_PERFORM_ACTION_LAB, NOP_2;
 
-// Wait for Statistics Bus ready flag is required
-EZwaitFlag F_ST;
+If (byTempCondByte2.bit[1])  jmp SKIP_BDOS_CNTR, NOP_2;
+
+EZwaitFlag F_SR;
+
+//Store First signature counters
+Mov  BDOS_SIG31_CFG_TSTORE,  STAT_RESULT_L , 4;
+Mov  uqTmpReg8,              STAT_RESULT_H , 4;
+
+SKIP_BDOS_CNTR: 
 
 // Take RTC timestamp (needs to do it as early as possible since this operation takes a few clocks)
 // It is used later for Safe Reset timestamp validation
-#if 1
+
+/*
 Mov STAT_REG0, STS_READ_SYS_INFO_CMD__SRC_RTC, 4;
-Nop;//Mov byFrameActionReg, FRAME_BYPASS_NETWORK, 1;  //set action bypass to network
+MovBits  ALU , STS_READ_SYS_INFO_CMD , 5 , RESET;
+Nop;
+Nop;
+Mov STAT_CMD, ALU, 2;
+*/
+
+/*
+Mov STAT_REG0, STS_READ_SYS_INFO_CMD__SRC_RTC, 4;
+Nop;
 Nop;
 Nop;
 Mov STAT_CMD, STS_READ_SYS_INFO_CMD, 2;
-#endif
+
+*/
+EZstatSendCmdIndexImm STS_READ_SYS_INFO_CMD__SRC_RTC, STS_READ_SYS_INFO_CMD;
+
+
+
 
 // 2 instances handling:
 
 // Check instance configuration match between Policy & SYN Protection:
 
-/*MovBits byTempCondByte2, uqGlobalStatusBitsReg.bit[POLICY_INSTANCE_0_BIT], 2;*/                      // Get policy configured instance
-
-/*if ( byGlobalStatusBitsReg.bit[POLICY_CONT_ACT_BIT] )*/ 
-MovBits byTempCondByte2, bySynProtCtrl, 2; 	// For default policy set instance id identical to match itself
-//MovBits byTempCondByte1, byCtrlMsgPrs1.bit[MSG_CTRL_TOPPRS_1_SYN_BITS], 2;                        	// byTempCondByte1 is needed for handling SYN protection later in the code 
+//MovBits byTempCondByte2, uqGlobalStatusBitsReg.bit[POLICY_INSTANCE_0_BIT], 2;                      // Get policy configured instance
+MovBits byTempCondByte1, byCtrlMsgPrs1.bit[MSG_CTRL_TOPPRS_1_SYN_BITS], 2;                        	// byTempCondByte1 is needed for handling SYN protection later in the code 
 //And byTempCondByte2, bySynProtCtrl, byTempCondByte2, 1, MASK_00000003, MASK_BOTH;
 //Nop;
 
@@ -658,16 +1060,17 @@ MovBits byTempCondByte2, bySynProtCtrl, 2; 	// For default policy set instance i
 //JZ POLICY_PERFORM_ACTION_LAB, NOP_2;
 
 Mov uqSynProtCounter, 0, 4;
-Nop;
+//Nop;
                          
 // If instance in SYN_PROT_DEST_STR equals instance configured in policy continue to SYN Protection handling
-//If (byTempCondByte2.bit[0]) GetRes uqSynProtCounter, SYN_PROT_RES_INST_0_CID_OFF(SYN_PROT_DEST_STR), 2;
-//If (byTempCondByte2.bit[1]) GetRes uqSynProtCounter, SYN_PROT_RES_INST_1_CID_OFF(SYN_PROT_DEST_STR), 2;
-
+/*
+If (byTempCondByte2.bit[0]) GetRes uqSynProtCounter, SYN_PROT_RES_INST_0_CID_OFF(SYN_PROT_DEST_STR), 2;
+If (byTempCondByte2.bit[1]) GetRes uqSynProtCounter, SYN_PROT_RES_INST_1_CID_OFF(SYN_PROT_DEST_STR), 2;
+*/
 GetRes uqSynProtCounter, SYN_PROT_RES_INST_0_CID_OFF(SYN_PROT_DEST_STR), 4;
 Mov byTempCondByte1,  0, 1;
 Mov byTempCondByte2,  0, 1;
-Mov byTempCondByte3,  0, 1;
+MovBits byTempCondByte3.bit[0],  0, 2;
 Mov uqTmpReg6,        0, 4;
 
 
@@ -681,8 +1084,8 @@ mov uqTmpReg6.byte[1], STAT_RESULT_H.byte[0], 1;
 
 
 // Decode packet type (SYN\RST\ACK)
-MovBits ALU, byCtrlMsgPrs1.bit[MSG_CTRL_TOPPRS_1_SYN_BITS], 2;
-nop;
+MovBits ALU, byCtrlMsgPrs1.bit[MSG_CTRL_TOPPRS_1_SYN_BITS], 2 , RESET;
+//nop;
 decode  ALU, ALU, 1, MASK_00000003, MASK_SRC1;  // This decode ignores the case that byCtrlMsgPrs1.bit[MSG_CTRL_TOPPRS_1_SYN_BITS] == 0x3 (ACK with payload), first it will discover only ACK and only then check if it also contains payload
 MovBits ENC_PRI.bit[9], 0, 7;
 Mov byTempCondByte1, ALU, 1;
@@ -690,7 +1093,7 @@ Mov byTempCondByte1, ALU, 1;
 // Decode entry configuration bits: Bit[5] - Aut.Table Match, Bit[6] - Aut.Table Lkp, Bit[7] - Config: Syn\Safe Reset
 MovBits ALU, bySynProtCtrl.bit[SYN_PROT_CTRL_AUTH_MATCH_BIT], 3;
 if (byTempCondByte1.bit[1]) MovBits ALU.bit[0], bySynProtCtrl.bit[SYN_PROT_CTRL_CONTENDER_MATCH_BIT], 1; // If RST packet - use Bit[2] (Cont.Table Match) instead of Bit[5]
-Nop;
+//Nop;
 decode ALU, ALU, 1, MASK_00000007, MASK_SRC1;
 
 MovBits ENC_PRI.bit[9], byTempCondByte1.bit[0], 7;
@@ -727,26 +1130,26 @@ SYN\RST  LKP  Match
    0      0     0     - Continue 
 */
 
-MovBits ENC_PRI.bit[9], ALU.bit[1], 7;
-Add uqSynProtCounter, uqSynProtCounter, PD_MATCH_CHALLENGE_OFFSET, 1;  // For ACK packets increment Challenge Response counter
-
-Jmul POLICY_PERFORM_ACTION_LAB,           //111
-     POLICY_PERFORM_ACTION_LAB,           //110
-     POLICY_PERFORM_ACTION_LAB,           //101
-     POLICY_PERFORM_ACTION_LAB,           //100
-     SYN_PROT_INC_CHAL_COUNTER_AND_CONT,  //011
+MovBits ENC_PRI.bit[13], ALU.bit[1], 3;
+Mov   STAT_RESULT_L , BDOS_SIG31_CFG_TSTORE , 4; 
+Jmul SYN_PROT_INC_CHAL_COUNTER_AND_CONT,  //011
      ACK_RCV_LAB,                         //010
-     POLICY_PERFORM_ACTION_LAB;           //001
+     POLICY_PERFORM_ACTION_LAB , NO_NOP;           //001
+     Add uqSynProtCounter, uqSynProtCounter, PD_MATCH_CHALLENGE_OFFSET, 1;  // For ACK packets increment Challenge Response counter 
+     Mov   STAT_RESULT_H , uqTmpReg8 , 4; 
 
 //case 000
+
+
 //get the metadata values
-mov uqTmpReg6, uqGlobalStatusBitsReg.byte[1] , 2;
+GetRes uqTmpReg6, { POLICY_UID_OFF }(POLICY_RES_CONF_STR), 2;  
 
 //do not mark if there is safe reset configuration
 If (bySynProtCtrl.bit[SYN_PROT_CTRL_CHALLENGE_BIT]) Jmp POLICY_PERFORM_ACTION_LAB, NO_NOP;
    //set on the SYN mask bit
    MovBits uqTmpReg6.bit[9], 0x1f , 5;
    Nop;
+
 jmp  POLICY_PERFORM_ACTION_LAB, NOP_1;
 PutKey  MSG_POLICY_ID_OFF(HW_OBS)  , uqTmpReg6 ,  2;    
 
@@ -769,6 +1172,9 @@ SYN\RST  LKP  Match
 
 MovBits ENC_PRI.bit[9], ALU.bit[1], 7;
 Add uqSynProtCounter, uqSynProtCounter, PD_MATCH_CHALLENGE_OFFSET, 1;  // For RST packets increment Challenge Response counter
+
+Mov   STAT_RESULT_L , BDOS_SIG31_CFG_TSTORE , 4; 
+Mov   STAT_RESULT_H , uqTmpReg8 , 4; 
 
 Jmul FRAME_DROP_LOCAL_LAB,             //111
      SYN_PROT_RST_AUTH_CHECK_LAB,      //110
@@ -799,7 +1205,9 @@ SYN\RST  LKP  Match
 */
 
 MovBits ENC_PRI.bit[9], ALU.bit[1], 7;
-Nop;
+Mov   STAT_RESULT_L , BDOS_SIG31_CFG_TSTORE , 4; 
+Mov   STAT_RESULT_H , uqTmpReg8 , 4; 
+
 Jmul SYN_PROT_INC_AUTH_COUNTER_AND_CONT,                    //111
      SYN_PROT_TYPE_CONT_LAB,                                //110
      POLICY_PERFORM_ACTION_LAB,                             //101
@@ -818,7 +1226,7 @@ SYN_PROT_TYPE_CONT_LAB:
 if(!bySynProtCtrl.bit[SYN_PROT_CTRL_CONTENDER_MATCH_BIT]) jmp SYN_PROT_PREPARE_CHALLENGE_AND_INC_COUNTER_LAB, NOP_1;           
     if(!bySynProtCtrl.bit[SYN_PROT_CTRL_CONTENDER_MATCH_BIT]) MovBits byCtrlMsgRsv0.bit[MSG_CTRL_TOPRSV_0_CHALLENGE_TYPE_BITS], SYN_PROT_ACK_CHALLENGE_TYPE, 2;
 
-if(bySynProtCtrl.bit[SYN_PROT_CTRL_CONTENDER_VALIDITY_BIT]) jmp FRAME_DROP_LOCAL_LAB, NO_NOP;  // Test Contender entry validation bit
+if(bySynProtCtrl.bit[SYN_PROT_CTRL_CONTENDER_VALIDITY_BIT]) jmp FRAME_DROP_LOCAL_RTPC_MARKING_LAB, NO_NOP;  // Test Contender entry validation bit
     GetRes uxTmpReg1, SYN_PROT_RES_TS_OFF(SYN_PROT_DEST_STR), 2;  // Get timestamp saved in Contender result
     // For SYN packets that match to invalid Contender entries - increment Bad SYN counter
     if(bySynProtCtrl.bit[SYN_PROT_CTRL_CONTENDER_VALIDITY_BIT]) Add uqSynProtCounter, uqSynProtCounter, PD_MATCH_BAD_SYN_OFFSET, 1;
@@ -843,14 +1251,14 @@ MovBits CONTENDER_INVALID, 1, 1;            // Used for setting ctrl_bit[3] in C
 // Check if timestamp delta is within MIN limit (if not valid update Contender entry to invalid)
 Sub ALU, uqTmpReg6, uxTmpReg1, 2;
 GetRes byTempCondByte1, SYN_PROT_RES_TTL_OFF(SYN_PROT_DEST_STR), 1;       // Needed for TTL validation
-if (C) jmp SYN_PROT_LRN_CONT_LAB, NO_NOP;
+if (C) jmp SYN_PROT_LRN_CONT_RTPC_MARK_LAB, NO_NOP;
     if (C) GetRes uqTmpReg6, SYN_PROT_RES_TS_OFF(SYN_PROT_DEST_STR), 4;   // Return original entry timestamp value for updating Contender table entry to invalid
     if (C) Add uqSynProtCounter, uqSynProtCounter, PD_MATCH_BAD_SYN_OFFSET, 1;    
 
 // Check if timestamp delta is within MAX limit (if not - update Contender entry to invalid)
 Sub ALU, uxTmpReg2, uqTmpReg6, 2;
 GetRes byTempCondByte2, MSG_IP_TTL_OFF(MSG_STR), 1;                       // Needed for TTL validation
-if (C) jmp SYN_PROT_LRN_CONT_LAB, NO_NOP;
+if (C) jmp SYN_PROT_LRN_CONT_RTPC_MARK_LAB, NO_NOP;
     if (C) GetRes uqTmpReg6, SYN_PROT_RES_TS_OFF(SYN_PROT_DEST_STR), 4;   // Return original entry timestamp value for updating Contender table entry to invalid
     if (C) Add uqSynProtCounter, uqSynProtCounter, PD_MATCH_BAD_SYN_OFFSET, 1;    
 
@@ -868,19 +1276,19 @@ Sub byTempCondByte1, byTempCondByte1, byTempCondByte2, 1;
 nop;
 
 // If SYN_PROT_RES_TTL_OFF - MSG_IP_TTL_OFF < 0
-if (C) jmp FRAME_DROP_LOCAL_LAB, NOP_1;
+if (C) jmp FRAME_DROP_LOCAL_RTPC_MARKING_LAB, NOP_1;
     if (C) Add uqSynProtCounter, uqSynProtCounter, PD_MATCH_BAD_SYN_OFFSET, 1;
 
 // Result must be >= 0, so now subtract 3 to validate if it's 0,1,2 (so we must have a Carry, otherwise result > 2 which is not valid)
 Sub byTempCondByte1, byTempCondByte1, 3, 1;
 nop;
-if (!C) jmp FRAME_DROP_LOCAL_LAB, NOP_1;
+if (!C) jmp FRAME_DROP_LOCAL_RTPC_MARKING_LAB, NOP_1;
     if (!C) Add uqSynProtCounter, uqSynProtCounter, PD_MATCH_BAD_SYN_OFFSET, 1;
 
 // TTL validated
 
 // If timestamp & TTL are validated - delete Contender entry and add Authentication entry
-Jmp SYN_PRT_DEL_CONT_LAB, NO_NOP;                             
+Jmp SYN_PRT_DEL_CONT_LAB, NO_NOP;
     // For SYN packets that match to a valid Contender entry and its timestamp is validated - increment Good SYN counter
     Add uqSynProtCounter, uqSynProtCounter, PD_MATCH_GOOD_SYN_OFFSET, 1;
     MovBits CONTENDER_INVALID, 0, 1;    // Used for setting ctrl_bit[3] in Contender table learn as '0' to indicate valid entry
@@ -894,10 +1302,12 @@ SYN_PROT_INC_AUTH_COUNTER_AND_CONT:
 
 // For SYN packets that match to Authentication entries - increment Authenticated SYN counter
 Add uqSynProtCounter, uqSynProtCounter, PD_MATCH_SYN_AUTH_OFFSET, 1;
-nop;
+//nop;
 EZstatIncrByOneIndexReg uqSynProtCounter;
 
-jmp POLICY_PERFORM_ACTION_LAB, NOP_2;
+jmp POLICY_PERFORM_ACTION_LAB;
+    Mov   STAT_RESULT_L , BDOS_SIG31_CFG_TSTORE , 4; 
+    Mov   STAT_RESULT_H , uqTmpReg8 , 4; 
 
 
 //////////////////////////////////////////////////////
@@ -918,14 +1328,16 @@ nop;
 if (!byTempCondByte1.bit[0]) jmp SYN_PROT_ACK_AUTH_CONT, NOP_2;
 
 // If mode == 0 (Short ACK): continue with verified ACK for TCP Reset handling (learn in Auth. table + Inc. challenge counter)
-if (!bySynProtCtrl.bit[SYN_PROT_CTRL_TCP_RESET_MODE_BIT]) jmp SYN_PROT_PREPARE_CHALLENGE_LAB, NOP_1;
+if (!bySynProtCtrl.bit[SYN_PROT_CTRL_TCP_RESET_MODE_BIT]) jmp SYN_PROT_PREPARE_CHALLENGE_LAB, NO_NOP;
    if (!bySynProtCtrl.bit[SYN_PROT_CTRL_TCP_RESET_MODE_BIT]) MovBits byCtrlMsgRsv0.bit[MSG_CTRL_TOPRSV_0_CHALLENGE_TYPE_BITS], SYN_PROT_RST_CHALLENGE_TYPE, 2;   // Instruct TOPmodify to send RST packet 
+   If (RTPC_IS_ENABLED_BIT) mov uxEthTypeMetaData, RTPC_SYN_PRO_DROP , 2;
 
 // Mode == 1 (Payload ACK): check if ACK contains data, if ACK contains data continue with verified ACK for TCP Reset handling (learn in Auth. table + Inc. challenge counter)
-if (byCtrlMsgPrs1.bit[MSG_CTRL_TOPPRS_1_ACK_WITH_DATA_BIT]) jmp SYN_PROT_PREPARE_CHALLENGE_LAB, NOP_1;
+if (byCtrlMsgPrs1.bit[MSG_CTRL_TOPPRS_1_ACK_WITH_DATA_BIT]) jmp SYN_PROT_PREPARE_CHALLENGE_LAB, NO_NOP;
    if (byCtrlMsgPrs1.bit[MSG_CTRL_TOPPRS_1_ACK_WITH_DATA_BIT]) MovBits byCtrlMsgRsv0.bit[MSG_CTRL_TOPRSV_0_CHALLENGE_TYPE_BITS], SYN_PROT_RST_CHALLENGE_TYPE, 2;   // Instruct TOPmodify to send RST packet  
+   If (RTPC_IS_ENABLED_BIT) mov uxEthTypeMetaData, RTPC_SYN_PRO_DROP , 2;
 
-jmp FRAME_DROP_LOCAL_LAB, NOP_1;
+jmp FRAME_DROP_LOCAL_RTPC_MARKING_LAB, NOP_1;
     // If no data -> set bad ACK counter offset (do not increment, it is incremented in the drop label) and drop frame
     Add uqSynProtCounter, uqSynProtCounter, PD_MATCH_SHORT_ACK_DELTA, 1;  // For "Bad ACKs" packets increment Short ACK counter
 
@@ -942,7 +1354,9 @@ SYN_PROT_ACK_AUTH_CONT:
 // No need to set offset counter here since it was already set before
 EZstatIncrByOneIndexReg uqSynProtCounter;
  
-jmp POLICY_PERFORM_ACTION_LAB, NOP_2;
+jmp POLICY_PERFORM_ACTION_LAB;
+    Mov   STAT_RESULT_L , BDOS_SIG31_CFG_TSTORE , 4; 
+    Mov   STAT_RESULT_H , uqTmpReg8 , 4; 
 
 
 //////////////////////////////////////////////////////
@@ -953,29 +1367,44 @@ SYN_PROT_PREPARE_CHALLENGE_AND_INC_COUNTER_LAB:
 
 // Increment counter for Non-Authenticated SYN packets (for both ACK & SYN-ACK generation)
 
-Add uqSynProtCounter, uqSynProtCounter, PD_MATCH_SYN_OFFSET, 1;
-Nop;
+//Add uqSynProtCounter, uqSynProtCounter, PD_MATCH_SYN_OFFSET, 1;
+//Nop;
 EZstatIncrByOneIndexReg uqSynProtCounter;                        
 
+   If (RTPC_IS_ENABLED_BIT) mov uxEthTypeMetaData, RTPC_SYN_PRO_DROP , 2;
 
 SYN_PROT_PREPARE_CHALLENGE_LAB:
-
-GetRes uqTmpReg6, SYN_PROT_RES_F1_OFF(SYN_PROT_DEST_STR), 4;
+//check if RTPC is enabled and mark as double count
+If (RTPC_IS_ENABLED_BIT)  movBits RTPC_IS_DOUBLE_COUNT_BIT, 1, 1;
+SYN_PROT_PREPARE_CHALLENGE_AFTER_RTPC:
 
 // Prepare challenge - ACK (Safe Reset) \ SYN-ACK (T.Proxy) \ RST (TCP Reset)
-
 jmp rtmCountersPerPolicyUpdate_LAB, NO_NOP;
     Mov PC_STACK, SYN_POL_DONE_LAB, 2;
     MovBits byGlobalStatusBitsReg.bit[RTM_RECIVE_DROP_IND_BIT], 1, 1;
 
 indirect SYN_POL_DONE_LAB:
-PutKey MSG_RST_COOKIE_OFF(HW_OBS), uqTmpReg6, 4;
-PutHdr HREG[ 1 ], RSV_FFT_SYN_LKP_HDR;
+
+if (!bitRSV_isRoutingMode) jmp FFT_TABLE_TXCOPY_SYN_END_LAB;
+    Copy KMEM_OFFSET ( HW_OBS ),  MSG_VIF_OFF(MSG_STR), 1;
+    PutHdr HREG[ COM_HBS ], RSV_FFT_SYN_LKP_HDR;
+
+if (!bitRSV_isRoutingMode) jmp FRAME_BYPASS_CPU_2NETWORK_LAB , NOP_2;
+
+//set tx copy table search for from Host path
+    GetRes uqTmpReg6 , 0(INT_TCAM_STR), 3 ;
+    PutHdr HREG[ COM_HBS ], RSV_ROUTE_SYN_LKP_HDR;
+
+ and ALU, uqTmpReg6.byte[1], uqTmpReg6.byte[1] , 2, MASK_000007FF, MASK_BOTH;    
+ GetRes ALU.byte[2],  MSG_SRC_PORT_OFF(MSG_STR), 1;
+ Nop; 
+ PutKey  KMEM_OFFSET( HW_OBS ),  ALU, 3;
+
+FFT_TABLE_TXCOPY_SYN_END_LAB:
+GetRes uqTmpReg6, SYN_PROT_RES_F1_OFF(SYN_PROT_DEST_STR), 4;
+Add COM_HBS , COM_HBS , 1 , 1;
 MovBits byTemp3Byte0.bit[CTX_LINE_OUT_IF]  , 1 , 1;
-
-Copy KMEM_OFFSET ( HW_OBS ),  MSG_VIF_OFF(MSG_STR), 1;
-//Add KMEM_OFFSET , KMEM_OFFSET , RSV_FFT_RX_COPY_PORT_LKP_KEY_SIZE_KMEM_ALIGN , 1;
-
+PutKey MSG_RST_COOKIE_OFF(HW_OBS), uqTmpReg6, 3;
 
 #define SYN_COOKIE_ACTION (FRAME_BYPASS_NETWORK | FRAME_SYN_COOKIE_GEN);
 jmp SEND_PACKET_LAB, NO_NOP;
@@ -994,24 +1423,30 @@ ACK_RCV_LAB:
 
 #define PD_MATCH_SHORT_ACK_DELTA    (PD_MATCH_SHORT_ACK_OFFSET - PD_MATCH_CHALLENGE_OFFSET);    
 
+
+
 // TCP Reset disabled: Learn Authentication entry (+ Inc. challenge counter) and send packet to CPU
 if (!bySynProtCtrl.bit[SYN_PROT_CTRL_TCP_RESET_ACTIVE_BIT]) jmp ACK_RCV_LAB_CONT, NO_NOP;
    //get the metadata values
-   mov uqTmpReg6, uqGlobalStatusBitsReg.byte[1] , 2;
+   GetRes uqTmpReg6, { POLICY_UID_OFF }(POLICY_RES_CONF_STR), 2;  
    //set on the SYN mask bit
    MovBits uqTmpReg6.bit[9], 0x1f , 5;
 
 // TCP Reset enabled: check TCP Reset mode
 
 // If mode == 0 (Short ACK): continue with verified ACK for TCP Reset handling (learn in Auth. table + Inc. challenge counter)
-if (!bySynProtCtrl.bit[SYN_PROT_CTRL_TCP_RESET_MODE_BIT]) jmp SYN_PROT_LRN_AUT_LAB, NOP_2;
+if (!bySynProtCtrl.bit[SYN_PROT_CTRL_TCP_RESET_MODE_BIT]) jmp SYN_PROT_LRN_AUT_LAB, NOP_1;
+   If (RTPC_IS_ENABLED_BIT)  Mov uxEthTypeMetaData, RTPC_SYN_PRO_DROP, 2;
 
 // Mode == 1 (Payload ACK): check if ACK contains data, if ACK contains data continue with verified ACK for TCP Reset handling (learn in Auth. table + Inc. challenge counter)
-if (byCtrlMsgPrs1.bit[MSG_CTRL_TOPPRS_1_ACK_WITH_DATA_BIT]) jmp SYN_PROT_LRN_AUT_LAB, NOP_2; 
+if (byCtrlMsgPrs1.bit[MSG_CTRL_TOPPRS_1_ACK_WITH_DATA_BIT]) jmp SYN_PROT_LRN_AUT_LAB, NOP_1; 
+    If (RTPC_IS_ENABLED_BIT)  Mov uxEthTypeMetaData, RTPC_SYN_PRO_DROP, 2;
 
-jmp FRAME_DROP_LOCAL_LAB, NOP_1;
+jmp FRAME_DROP_LOCAL_LAB, NO_NOP;
     // If no data -> set bad ACK counter offset (do not increment, it is incremented in the drop label) and drop frame
     Add uqSynProtCounter, uqSynProtCounter, PD_MATCH_SHORT_ACK_DELTA, 1;  // For "Bad ACKs" packets increment Short ACK counter
+    //before drop the frame - mark it as RTPC if enable
+   If (RTPC_IS_ENABLED_BIT)  Mov uxEthTypeMetaData, RTPC_SYN_PRO_FAIL_DROP , 2;
 ACK_RCV_LAB_CONT:
 // Contunue with marking only for non TCP_RESET mode
 jmp SYN_PROT_LRN_AUT_LAB, NOP_1;
@@ -1025,7 +1460,12 @@ jmp SYN_PROT_LRN_AUT_LAB, NOP_1;
 //////////////////////////////////////////////////////
 
 SYN_PROT_RST_AUTH_CHECK_LAB:
-if ( bySynProtCtrl.bit[SYN_PROT_CTRL_AUTH_MATCH_BIT] ) jmp POLICY_PERFORM_ACTION_LAB, NOP_2;
+if ( bySynProtCtrl.bit[SYN_PROT_CTRL_AUTH_MATCH_BIT] ) jmp POLICY_PERFORM_ACTION_LAB;
+                                                          Mov   STAT_RESULT_L , BDOS_SIG31_CFG_TSTORE , 4; 
+                                                          Mov   STAT_RESULT_H , uqTmpReg8 , 4; 
+If (RTPC_IS_ENABLED_BIT)  
+   Mov uxEthTypeMetaData, RTPC_SYN_PRO_DROP, 2;
+
 jmp SYN_PROT_LRN_CONT_LAB, NOP_2;
 
 
@@ -1049,7 +1489,7 @@ SYN_PRT_DEL_CONT_LAB:
     	
    GetRes uqTmpReg6, SYN_PROT_RES_F1_OFF(SYN_PROT_DEST_STR), 4;
 	EZwaitFlag  F_LN_RSV;
-
+	
    GetRes ALIAS_LRN_REG,   MSG_RST_LEARN_KEY   (MSG_STR), 4;     // Key bytes [0..3]
    GetRes ALIAS_LRN_REG,   MSG_RST_LEARN_KEY_23(MSG_STR), 4;     // Key bytes [4..7]
    GetRes ALIAS_LRN_REG,   MSG_RST_LEARN_KEY_45(MSG_STR), 4;     // Key bytes [ 8..11]
@@ -1067,6 +1507,8 @@ SYN_PRT_DEL_CONT_LAB:
    EZwaitNoFlag F_LN_RSV;
    jmp SYN_PROT_LRN_AUT_LAB, NOP_2;    
 
+SYN_PROT_LRN_CONT_RTPC_MARK_LAB:
+   If (RTPC_IS_ENABLED_BIT)   Mov uxEthTypeMetaData, RTPC_SYN_PRO_FAIL_DROP , 2;
 
 // Add Contender entry
 SYN_PROT_LRN_CONT_LAB:
@@ -1142,7 +1584,10 @@ if (bySynProtCtrl.bit[SYN_PROT_CTRL_TCP_RESET_ACTIVE_BIT]) jmp SYN_PROT_PREPARE_
     if (bySynProtCtrl.bit[SYN_PROT_CTRL_TCP_RESET_ACTIVE_BIT]) MovBits byCtrlMsgRsv0.bit[MSG_CTRL_TOPRSV_0_CHALLENGE_TYPE_BITS], SYN_PROT_RST_CHALLENGE_TYPE, 2;   // Instruct TOPmodify to send RST packet
 
 // Else - continue with packet processing
-jmp POLICY_PERFORM_ACTION_LAB, NOP_2;
+jmp POLICY_PERFORM_ACTION_LAB;
+    Mov   STAT_RESULT_L , BDOS_SIG31_CFG_TSTORE , 4; 
+    Mov   STAT_RESULT_H , uqTmpReg8 , 4; 
+
 
 #undef CONTENDER_INVALID;
 #undef MSG_RST_LEARN_KEY_23;
@@ -1153,12 +1598,12 @@ jmp POLICY_PERFORM_ACTION_LAB, NOP_2;
 //////////////////////////////////////////////////////
 //  SYN Protection: Drop packet & increment counter
 //////////////////////////////////////////////////////
+FRAME_DROP_LOCAL_RTPC_MARKING_LAB:
 
+If (RTPC_IS_ENABLED_BIT)   Mov uxEthTypeMetaData, RTPC_SYN_PRO_FAIL_DROP , 2;
 FRAME_DROP_LOCAL_LAB:
 
 EZstatIncrByOneIndexReg uqSynProtCounter;
-
-if( byGlobalStatusBitsReg.bit[POLICY_CONT_ACT_BIT]) jmp FRAME_DROP_LAB, NOP_2;
 
 jmp rtmCountersPerPolicyUpdate_LAB, NO_NOP;
     Mov PC_STACK, FRAME_DROP_LAB, 2;
@@ -1169,20 +1614,6 @@ jmp rtmCountersPerPolicyUpdate_LAB, NO_NOP;
 #undef bySynProtCtrl;
 
 
-//////////////////////////////////////////
-//   Control Frame Handling
-//////////////////////////////////////////
-
-CONTROLFRAME_ACTION_LAB:
-
-   // for debug EZwaitFlag F_ORD;
-   // for debug semtake;
-   // for debug Mov ORDERING_REG ,1 , 1;
-
-   HighLearnTCPSessions;
-
-   // for debug semgive;
-   halt DISC;
 
 
 
@@ -1192,48 +1623,80 @@ CONTROLFRAME_ACTION_LAB:
 
 POLICY_PERFORM_ACTION_LAB:
 
-/*
-Mov     uqTmpReg1, 0, 4;
-Mov     HW_OBS, 0, 1;
-MovBits ENC_PRI.bit[13], uqTmpReg1.bit[0], 3;
 
-MovBits ENC_PRI.bit[13], uqGlobalStatusBitsReg.bit[POLICY_CNG_OOS_BIT], 2;
-GetRes  uqBdosL4ValidBitsReg, SIGNA_CNTRL_RES_OFF(BDOS_ATTACK_RESULTS_L23_2_STR), 4;
+//read bdos structure control bits from Policy structure 
+//uqSignaPolicyBase - has Signatures policy counter offset
+//uqTmpReg9         - has first executed signature counter offset
+     
+POLICY_BDOS_LAB:
+
+   GetRes byTempCondByte2 , 0x16(POLICY_RES_CONF_STR) , 1;
+   Sub ALU , uqAllSignaToInspectBitmask , 0 , 4;
+
+   //if no match,but only if no negative foriegn controllers, set flag zero 
+   If (!byTempCondByte2.bit[4]) Or ALU , uqAllNegativeSignaBitmask , uqAllNegativeSignaBitmask , 4;
    
-policyPerformActionLab BC_S0G0S0_SEL;
-*/
-// Don't increment rtm per policy for default policy case
-if ( byGlobalStatusBitsReg.bit[POLICY_CONT_ACT_BIT] ) jmp SEND_PACKET_LAB_CPU, NOP_2;
+        
+    Nop;
 
-jmp rtmCountersPerPolicyUpdate_LAB, NO_NOP;
-   Mov PC_STACK, AFTER_POLICY, 2;
-   MovBits byGlobalStatusBitsReg.bit[RTM_RECIVE_DROP_IND_BIT], 1, 1;
+   //match in bdos offset of policy structure 
+   JZ AFTER_POLICY;
+       Decode ALU,bySigNum,4;
+       Nop;
+   
+POLICY_BDOS_LOOP:
 
-// Finish policy evaluation 
-Jmp AFTER_POLICY /*, NOP_2*/;
-   Mov     uqTmpReg1, 0, 4;
-   //Mov     HW_OBS, 0, 1;
-   nop;
+   //uqTmpReg9 - signature base
+   //STAT_RESULT_L - signature info ( glob policy id and more )
+   //STAT_RESULT_H - group 0 result
+   AnalyzeBdosResult bySigNum, uqAllNegativeSignaBitmask;   
+
+   // clear evaluated signature num in the bitmask
+   Decode ALU, bySigNum, 4;
+   Xor uqAllSignaToInspectBitmask, uqAllSignaToInspectBitmask, ALU, 4;
+   Nop;
+   JZ AFTER_POLICY;          
+      Encode bySigNum, ALU, 4;//bySigNum = next signature to inspect
+      SHL ALU, ALU, 2, 4;     //ALU = bySigNum*4
+   
+   Sub ALU , ALU , bySigNum , 2;              // ALU = Signature offset (Local sigId *3)
+   Add uqTmpReg9, ALU, uqSignaPolicyBase, 4;  // BDOS_SIGNA_SEL, ALU <- Signature Absolute Address in phase 0
 
 
+   //wait for interface ready
+   EZwaitFlag F_ST;
 
+   // getRes the first group of the signature
+   //EZstatSendCmdIndexReg ALU , STS_READ_CMD;
+   Jmp POLICY_BDOS_LOOP;
+       mov        SREG_LOW [9], ALU , 4;
+       movbits    SREG_LOW [1].BYTE [2], ((0x2E << offset_bit(EZstat_StsCmd.bitsOpcode)) | ( 0 << offset_bit(EZstat_StsCmd.bitCtxEnable)) | ( 0 << offset_bit(EZstat_StsCmd.bitsCtxOffset))),     offset_bit(EZstat_StsCmd.bitsReserved_11)  ;
+
+#undef uqAllNegativeSignaBitmask;   
+#undef uqAllSignaToInspectBitmask;
+#undef bySigNum;
 //////////////////////////////////////////
 //   Frame discard handling
 //////////////////////////////////////////
 
-DISCARD_LAB:
 indirect FRAME_DROP_LAB:
 
 // RT monitoring drop counters update 
 Mov PC_STACK, CONTROL_DISCARD_LAB, 2;
-MovBits byGlobalStatusBitsReg.bit[RTM_RECIVE_DROP_IND_BIT], 0, 1 ;  
+
+//if marked, skip RTM 
+If (RTPC_IS_ENABLED_BIT)  jmp CONTROL_DISCARD_LAB, NOP_2;
+
+MovBits byGlobalStatusBitsReg.bit[RTM_RECIVE_DROP_IND_BIT], 0, 1 ;
+
 
 
 //////////////////////////////////////////
 //   RT monitoring counters update
 //////////////////////////////////////////
-#if 1
-rtmCountersUpdate_LAB:
+
+rtmCountersUpdate_LAB: 
+
 //counter structure
 // UINT_64 recive;
 // UINT_64 drop;
@@ -1257,9 +1720,9 @@ if (!byCtrlMsgPrs1.bit[MSG_CTRL_TOPPRS_1_RT_EN_BIT]) jmp SKIP_RT_CALC, NO_NOP;
     Mov ALU, RT_MONITOR_BASE_CNTR, 4;
  
 //Mov uqTmpReg2 , RT_MONITOR_BASE_CNTR , 4;
-Mov2Bits uqTmpReg3.BITS[2,2], byCtrlMsgPrs2.BITS[~MSG_CTRL_TOPPRS_2_IS_CAUI_PORT_BIT,~MSG_CTRL_TOPPRS_2_IS_CAUI_PORT_BIT]; // uqTmpReg3 = CAUI ? 0 : 4
+Mov2Bits uqTmpReg3.BITS[2,2], byCtrlMsgPrs2Rsv2.BITS[~MSG_CTRL_TOPPRS_2_IS_CAUI_PORT_BIT,~MSG_CTRL_TOPPRS_2_IS_CAUI_PORT_BIT]; // uqTmpReg3 = CAUI ? 0 : 4
 Add uqTmpReg2, uqTmpReg5, ALU, 4, MASK_0000FFFF, MASK_SRC1;
-Sub uqTmpReg4 , uqTmpReg4 , uqTmpReg3 , 4 ,MASK_0000FFFF , MASK_SRC1; //calculate size w/o vlan
+Sub uqTmpReg4 , uqTmpReg4 , uqTmpReg3, 4 ,MASK_0000FFFF , MASK_SRC1; //calculate size w/o vlan
 MovBits uqTmpReg4.byte[2].bit[0], 0x1, 1; //set 1 in uqTmpReg4[16:31] to indicate 1 frame received
 if ( byGlobalStatusBitsReg.bit[RTM_RECIVE_DROP_IND_BIT] ) Add uqTmpReg2, uqTmpReg2, 1, 4; 
 
@@ -1298,7 +1761,7 @@ Mov ALU, RT_MONITOR_EXLUD_BASE_CNTR, 4;
  
 //Mov uqTmpReg2 , RT_MONITOR_BASE_CNTR , 4;
 
-Mov2Bits uqTmpReg3.BITS[2,2], byCtrlMsgPrs2.BITS[~MSG_CTRL_TOPPRS_2_IS_CAUI_PORT_BIT,~MSG_CTRL_TOPPRS_2_IS_CAUI_PORT_BIT];
+Mov2Bits uqTmpReg3.BITS[2,2], byCtrlMsgPrs2Rsv2.BITS[~MSG_CTRL_TOPPRS_2_IS_CAUI_PORT_BIT,~MSG_CTRL_TOPPRS_2_IS_CAUI_PORT_BIT];
 Add uqTmpReg2, uqTmpReg5, ALU, 4, MASK_0000FFFF, MASK_SRC1;
 Sub uqTmpReg4, uqTmpReg4, uqTmpReg3, 4, MASK_0000FFFF, MASK_SRC1; //calculate size w/o vlan
 MovBits uqTmpReg4.byte[2].bit[0], 0x1, 1; //set 1 in uqTmpReg4[16:31] to indicate 1 frame received
@@ -1337,7 +1800,7 @@ rtmCountersPerPolicyUpdate_LAB:
 // - For drop case should doesn't matter
 Mov   uqTmpReg5 , 0 , 4;
 if ( !byGlobalStatusBitsReg.bit[RTM_RECIVE_DROP_IND_BIT] ) jmp DROP_COUNTER_LAB, NO_NOP;
-    Mov uqTmpReg3, 0, 4;
+    Mov   uqTmpReg3 , 0 , 4;
     GetRes uqTmpReg5.byte[2], MSG_SRC_PRT_OFF(MSG_STR), 1 ;  // get real offset to counter 
 
 //check if recive per policy counter already updated
@@ -1354,7 +1817,7 @@ MovBits uqTmpReg5.byte[0].bit[1] , uqTmpReg5.byte[2].bit[0] , 8;
 //disable recive counter increment for this policy
 if ( byGlobalStatusBitsReg.bit[RTM_RECIVE_DROP_IND_BIT] ) MovBits byGlobalStatusBitsReg.bit[RTM_RECIVED_IND_BIT], 1, 1; 
 
-Mov2Bits uqTmpReg3.BITS[2,2], byCtrlMsgPrs2.BITS[~MSG_CTRL_TOPPRS_2_IS_CAUI_PORT_BIT,~MSG_CTRL_TOPPRS_2_IS_CAUI_PORT_BIT];
+Mov2Bits uqTmpReg3.BITS[2,2], byCtrlMsgPrs2Rsv2.BITS[~MSG_CTRL_TOPPRS_2_IS_CAUI_PORT_BIT,~MSG_CTRL_TOPPRS_2_IS_CAUI_PORT_BIT]; // uqTmpReg3 = CAUI ? 0 : 4
 
 //per policy index dosen't need port , therefore in can be overrited by policy
 MovBits uqTmpReg5.byte[0].bit[4], uxGlobalPolIdx.bit[0], 16; 
@@ -1370,13 +1833,8 @@ if ( byGlobalStatusBitsReg.bit[RTM_RECIVE_DROP_IND_BIT] ) //only recive till now
 EZstatPutDataSendCmdIndexReg uqTmpReg2, uqTmpReg4, STS_INCR_TWO_VAL_CMD, 0, 0, 1;
 
 SKIP_POLICY_RT_CALC:
+
 Jstack NOP_2;
-#else
-rtmCountersUpdate_LAB:
-rtmCountersExcludeUpdate_LAB: 
-rtmCountersPerPolicyUpdate_LAB: 
-Jstack NOP_2;
-#endif
 
 
 FRAME_RECEIVED_FROM_2ND_NP:
@@ -1392,4 +1850,93 @@ Jmp TOP_RESOLVE_TERMINATION_LAB, NO_NOP;
    // All the information was calculated in TOP Parse. Pass message to TOP Modify
    PutHdr HREG[ 0 ], RSV_MSG_HDR;
 
+//#undef uxGlobalPolIdx;
+
+SPEC_ROUTE:
+
+   GetRes  UREG[1], MSG_SPEC_SUB_ACTION(MSG_STR), 1; // Extract frame action
+   
+   Nop;
+   If (UREG[1].bit[0]) jmp  L_RSV_INBLIM_START;   
+// set MSG_CTRL_TOPRSV_1_INTERLINK_PACKET_BIT bit in message to Top Modify
+   // For frame from peer NP device, no context lines are loaded to Modify, so clear all bits
+   // in the INDIRECT_CTX_LOAD register (used in the halt command)
+   PutKey  MSG_ACTION_ENC_OFF(HW_OBS), byFrameActionReg, 1;
+   Mov INDIRECT_CTX_LOAD, 0, 2;
+   
+   If (UREG[1].bit[1]) jmp  L_RSV_PPS_INBLIM_START, NOP_2;      
+
+   // for frame from peer NP device, there is no need in any extra information to be calculated.
+   // All the information was calculated in TOP Parse. Pass message to TOP Modify
+   PutHdr HREG[ 0 ], RSV_MSG_HDR;
+
+
+halt UNIC,
+     HW_MSG_HDR,
+     IND_LD_CTX;
   
+L_RSV_PPS_INBLIM_START:
+
+EZstatIncrIndexImm TRAFFIC_LIMIT_INB_PPS_DROP_CNTR_BASE , 1;
+
+GetRes  ALU, 0xA(MSG_STR), 2; // Extract frame len
+EZstatIncrIndexReg TRAFFIC_LIMIT_INB_PPS_BYTE_CNTR_BASE, ALU;
+                                    
+MovBits byGlobalStatusBitsReg.bit[RTM_RECIVE_DROP_IND_BIT], 0, 1;  
+//GetRes  ALU, 0xA(MSG_STR), 2; // Extract frame len
+//EZstatIncrIndexReg TRAFFIC_LIMIT_INB_BYTE_DROP_CNTR_BASE, ALU;
+
+jmp rtmCountersUpdate_LAB, NO_NOP;  //RT monitoring drop counters update
+   Mov PC_STACK, CONTROL_DISCARD_LAB, 2;   
+   Nop;
+
+
+
+halt UNIC,
+     HW_MSG_HDR,
+     IND_LD_CTX;
+
+L_RSV_INBLIM_START:
+
+
+if (!bitRSV_isRoutingMode) Jmp RSV_INBLIM_DROP, NO_NOP;
+   GetRes byCtrlMsgPrs2Rsv2,  MSG_CTRL_TOPPRS_2_OFF(MSG_STR), 1;   // initialize byCtrlMsgPrs2Rsv2 (input output register)
+   GetRes byCtrlMsgPrs0,  MSG_CTRL_TOPPRS_0_OFF(MSG_STR), 2;       // both byCtrlMsgPrs0 and byCtrlMsgPrs1 are initilized here
+
+    
+Mov ALU , 0 , 1;
+
+GetCtrlBits ALU,
+            STRNUM[ ROUTING_TABLE_STR ].bit[ MATCH_BIT ], 
+            STRNUM[ ROUTING_TABLE_STR ].bit[ MATCH_BIT ], 
+            STRNUM[ ROUTING_TABLE_STR ].bit[ 7 ], 
+            STRNUM[ ROUTING_TABLE_STR ].bit[ VALID_BIT ] ; 
+
+Sub ALU , ALU , 0xF , 1 , ;
+Nop;
+JZ MY_IP_DET_INB, NOP_2;  //Jump if my ip is detected
+
+
+RSV_INBLIM_DROP:
+
+EZstatIncrIndexImm TRAFFIC_LIMIT_INB_DROP_CNTR_BASE , 1;
+
+MovBits byGlobalStatusBitsReg.bit[RTM_RECIVE_DROP_IND_BIT], 0, 1;  
+GetRes  ALU, 0xA(MSG_STR), 2; // Extract frame len
+EZstatIncrIndexReg TRAFFIC_LIMIT_INB_BYTE_DROP_CNTR_BASE, ALU;
+
+jmp rtmCountersUpdate_LAB, NO_NOP;  //RT monitoring drop counters update
+   Mov PC_STACK, CONTROL_DISCARD_LAB, 2;   
+   Nop;
+
+
+MY_IP_DET_INB:
+// for frame from peer NP device, there is no need in any extra information to be calculated.
+// All the information was calculated in TOP Parse. Pass message to TOP Modify
+PutHdr HREG[ 0 ], RSV_MSG_HDR;
+
+
+halt UNIC,
+     HW_MSG_HDR,
+     IND_LD_CTX;
+
