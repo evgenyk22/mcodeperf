@@ -39,11 +39,14 @@ EZTop Modify;
 // This is used for loading the HW_MSG that was copied from TOPresolve to TOPmodify
 LdMsgStr HW_GEN_MSG_STR;
 
+   
+
    Mov ENC_PRI, 0, 2;
    GetRes  bytmp1,  MSG_HASH_CORE_OFF(MSG_STR), 1; // get hash
    GetRes  byCtrlMsgMdf0, MSG_CTRL_TOPRSV_0_OFF(MSG_STR), 3; // also get byCtrlMsgMdf1, byCtrlMsgMdf2
    MovBits bytmp2, bytmp1.BIT[4], 4;
    GetRes  byActionReg,   MSG_ACTION_ENC_OFF(MSG_STR), 1;
+    
 
    // Check If packet arrived from peer device and send copy packets to CAUI ports
    If (byCtrlMsgMdf2.BIT[MSG_CTRL_TOPRSV_2_INTERLINK_PACKET_BIT])
@@ -62,11 +65,6 @@ LdMsgStr HW_GEN_MSG_STR;
 
    If (!Z) MovBits byCtrlMsgMdf2.BIT[MSG_CTRL_TOPRSV_2_INTERLINK_PACKET_BIT] , 1 ,1;
 
-   // Check RX copy port bit and handle RX copy port procedure
-   //If (byCtrlMsgMdf2.BIT[MSG_CTRL_TOPRSV_2_HAS_RX_COPY_BIT])
-    //  Jmp MDF_RX_COPY_PORT_LAB, NO_NOP;
-    //     Mov uqTempCondReg , 0 , 4;
-         //Mov PC_STACK, MDF_COPY_PORT_DONE_LAB, 2;
 
 Indirect MDF_COPY_PORT_DONE_LAB:
 
@@ -167,7 +165,9 @@ vardef regtype byMDF_TempCondByte4_SEARCH_MATCH_BITMAP byTempCondByte4;
 
 And ALU, byActionReg, {FRAME_BYPASS_HOST | FRAME_CONT_ACTION | FRAME_DROP | FRAME_CONF_EXTRACT | FRAME_SYN_COOKIE_GEN | FRAME_HOST_BYPASS_2NETW}, 1; // This mask DOES NOT include FRAME_BYPASS_NETWORK and FRAME_TP_BYPASS_2NETW
 
-Mov $byMDF_TempCondByte4_SEARCH_MATCH_BITMAP, SEARCH_MATCH_BITMAP, 1; // 2 LSbits are used to tell the match result for 2 lookups that return result to Context lines.
+//Mov $byMDF_TempCondByte4_SEARCH_MATCH_BITMAP, SEARCH_MATCH_BITMAP, 1; // 2 LSbits are used to tell the match result for 2 lookups that return result to Context lines.
+//Get $byMDF_TempCondByte4_SEARCH_MATCH_BITMAP , VID_BASE_MSG(MSG_STR) , 1;
+nop;
 If (!FLAGS.BIT[F_ZR]) Jmp SKIP_TX_VLAN_LAB;
     GetRes byDstPortReg, MSG_CTRL_TOPPRS_3_OFF(MSG_STR), 1;
     Nop;
@@ -176,9 +176,10 @@ If (!FLAGS.BIT[F_ZR]) Jmp SKIP_TX_VLAN_LAB;
 
 /* Now in transparent mode. */
 //ignore result temporary. Change it next for ND version
-if (!$byMDF_TempCondByte4_SEARCH_MATCH_BITMAP.BIT[CTX_LINE_OUT_IF]) jmp  FFT_NO_MATCH_LAB;
-    Mov uqTmpReg5, uqZeroReg, 4;
-    Nop;
+//if (!$byMDF_TempCondByte4_SEARCH_MATCH_BITMAP.BIT[CTX_LINE_OUT_IF]) jmp  FFT_NO_MATCH_LAB;
+Mov uqTmpReg5, uqZeroReg, 4;
+Nop;
+
 /*
 GetRes uqTmpReg2.byte[0], MDF_VIF_INF_OFF(OUT_VID_STR), 1;
    Mov ALU, PERVIF_OUT_BASE, 4;
@@ -337,10 +338,11 @@ and ALU, ALU, bytmp2, 1; // bytmp2.bit 0 holds the MREG configuration that allow
       jz MDF_SKIP_VLAN_CHANGE_LAB, NOP_2;
 and ALU, ALU, (1 << MDF_ROUTING_TABLE_RSLT__APP_CONTROLS__IS_MY_IP_BIT), 1;
    // Now check if RoutingTable match and MY_IP bit is set - if all tests are true then change the VLAN.
-   if (!$byMDF_TempCondByte4_SEARCH_MATCH_BITMAP.BIT[CTX_LINE_ROUTING_TABLE_RSLT]) jmp MDF_ROUTING_TABLE_NO_MATCH_LAB, NOP_2;
+   //if (!$byMDF_TempCondByte4_SEARCH_MATCH_BITMAP.BIT[CTX_LINE_ROUTING_TABLE_RSLT]) jmp MDF_ROUTING_TABLE_NO_MATCH_LAB, NOP_2;
 // At this stage we know that this is routing mode, there is routing lookup match, it is a MY_IP frame
 // (meaning it should be sent to the host), and MREG is configured to allow the VLAN modification.
 // Jump to the code location that changes the VLAN.
+nop;
 jnz CHANGE_SWITCH_VLAN_FOR_CPU_SIDE_LAB, NOP_2;
 #undef FRAME_BYPASS_HOST_OR_CONT_ACTION_TYPE;
 #undef FRAME_CONT_TYPE;
@@ -467,37 +469,6 @@ SKIP_OPTIMIZED_RECYCLING_LAB:
 L_MDF_ADD_TM_HDR:
 
 // update the Displacement register to include the TM at the beginning of the packet
-#ifdef __comment__
-
-Sub DISP_REG, DISP_REG, TM_HDR_SIZE, 2;
-
-
-
-
-
-// As the TM is used, the destination port should be changed to TM's port
-
-
-
-// Build the TM Header:
-
-// Set tmpFR_PTR to point to the beginnig of the frame. after DISP_REG was decremented by TM_HDR_SIZE this will allow access to the beginning of the TM header that will be added soon.
-
-Mov tmpFR_PTR, 0, 2;
-Mov uqTmpReg7.byte[2] , 0  , 2;
-Mov sSend_byDstPort, uqTmpReg7.byte[0], 1;
-
-// The rest of the TM header are all zeros
-
-Put 0 (tmpFR_PTR), uqZeroReg, 4;
-Put 0 (tmpFR_PTR),  uqTmpReg7     , 1;
-MovBits uqTmpReg7.byte[2].bit[6] , uqTmpReg7.byte[0].bit[0] , 8;
-Put 4 (tmpFR_PTR), uqZeroReg, 4;
-Put 5 (tmpFR_PTR), uqTmpReg7.byte[2], 2, SWAP;
-Put 8 (tmpFR_PTR), uqZeroReg   , 4;
-Put 12(tmpFR_PTR), uqZeroReg   , 4;
-
-#endif /* __comment__ */
 
 //update select FID according output port
 
@@ -510,6 +481,7 @@ AddTMHeaderToHostOutPort;
 
 L_MDF_SEND_FRAME:
 
+jmp DISCARD_LAB , NO_NOP;
 // Send the frame and finish the program
 
 
@@ -602,7 +574,7 @@ jmp SEND_LAB, NO_NOP;
 // TODO_INTEGRTION: should we also updates the transmit statistics counters for outgoing VIF id?
 
 MDF_BYPASS2NW_ROUTE_FRAME_MODIFICATION_LAB:
-if (!$byMDF_TempCondByte4_SEARCH_MATCH_BITMAP.BIT[CTX_LINE_ROUTING_TABLE_RSLT]) jmp MDF_ROUTING_TABLE_NO_MATCH_LAB, NOP_2;
+//if (!$byMDF_TempCondByte4_SEARCH_MATCH_BITMAP.BIT[CTX_LINE_ROUTING_TABLE_RSLT]) jmp MDF_ROUTING_TABLE_NO_MATCH_LAB, NOP_2;
 varundef byMDF_TempCondByte4_SEARCH_MATCH_BITMAP;
 
 
@@ -1045,7 +1017,6 @@ If ( !byCtrlMsgMdf2.BIT[MSG_CTRL_TOPRSV_2_INTERLINK_PACKET_BIT] ) jmp  MDF_TX_CO
    And ALU, byActionReg, {  FRAME_BYPASS_NETWORK  | FRAME_SYN_COOKIE_GEN  }, 1;
 
    //get bypass sw vlan
-   //GetRes  ALU , MDF_VIF_TX_VLAN_OFF(MDF_TX_COPY_INFO_STR), 2;
    Mov2Bits CAMO.bits[ 1 , 0 ] , byActionReg.bits[FRAME_BYPASS_NETWORK_BIT , FRAME_SYN_COOKIE_GEN_BIT ] ;
 
 
@@ -1055,8 +1026,8 @@ If ( !byCtrlMsgMdf2.BIT[MSG_CTRL_TOPRSV_2_INTERLINK_PACKET_BIT] ) jmp  MDF_TX_CO
        nop;
 
 
-   GetRes  uqTmpReg8 , MDF_VIF_TX_VLAN_OFF(MDF_TX_COPY_INFO_STR), 2;
-   If (CAMO.bit[ 0 ]) GetRes  uqTmpReg8 , MDF_VLAN_TX_OFF(MDF_TX_COPY_INFO_STR), 2;
+   GetRes  uqTmpReg8 , MDF_VIF_TX_VLAN_OFF(MSG_STR/*MDF_TX_COPY_INFO_STR*/), 2;
+   If (CAMO.bit[ 0 ]) GetRes  uqTmpReg8 , MDF_VLAN_TX_OFF(MSG_STR), 2;
 
        //get self tx vlan offset (syn challenge)
        //GetRes  uqTmpReg8 , MDF_VLAN_TX_OFF(MDF_TX_COPY_INFO_STR), 2;
@@ -1092,8 +1063,8 @@ MDF_TX_COPY_PORT_HTQE_LAB:
 
 *******************************************************************************************************/
 
-   GetRes  uqTmpReg8 , MDF_FFT_TX_COPY_INFO_OFF(MDF_TX_COPY_INFO_STR), COPY_PORT_STR_BYTE_SIZE;
-   Nop;
+   GetRes  uqTmpReg8 , MDF_FFT_TX_COPY_INFO_OFF(MSG_STR), COPY_PORT_STR_BYTE_SIZE;
+   Mov uqTmpReg3, 0, 4;
    And  ALU, uqTmpReg8, (1<<COPY_PORT_MATCH_BIT_OFF), 1, MASK_00000003, MASK_SRC1;
    nop;
    Jz  MDF_TX_COPY_PORT_ERROR_LAB;
@@ -1103,49 +1074,13 @@ MDF_TX_COPY_PORT_HTQE_LAB:
 
    // Use TX copy port information from FFT entry. If we are in routing mode the information
    //  will be overwritten in a couple of instructions
-   GetRes  uqCopyInfo, MDF_FFT_TX_COPY_INFO_OFF(MDF_TX_COPY_INFO_STR), COPY_PORT_STR_BYTE_SIZE;
+   GetRes  uqCopyInfo, MDF_FFT_TX_COPY_INFO_OFF(MSG_STR), COPY_PORT_STR_BYTE_SIZE;
 
-   Jmp MDF_COPY_PORT_START_LAB, NO_NOP;
+   //Jmp MDF_COPY_PORT_START_LAB, NO_NOP;
       //  overwrite TX copy port information in routing mode (get it from routing structure)
-      If (bitMDF_isRoutingMode)
-         GetRes  uqCopyInfo, MDF_ROUTING_TABLE_RSLT__TX_COPY_INFO_OFF(MDF_ROUTING_TABLE_RSLT_STR), COPY_PORT_STR_BYTE_SIZE;
-
-      Mov uqTmpReg3, 0, 4;
+   If (bitMDF_isRoutingMode)  GetRes  uqCopyInfo, MDF_ROUTING_TABLE_RSLT__TX_COPY_INFO_OFF(MDF_ROUTING_TABLE_RSLT_STR), COPY_PORT_STR_BYTE_SIZE;
 
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-//
-// RX copy handling
-//
-// Packet can arrive or sent to 4 logical directions:
-//
-// 1. From host - should never have a "RX copy port"
-// 2. From 2nd NP - should never have a "RX copy port"
-// 3. From Switch -
-//    3.1. To switch - should never have a "RX copy port" as this is handled by switch itself
-//    3.2. To host - should never have a "RX copy port" as this is handled by switch itself
-//    3.3. To local CAUI - remove switch VLAN
-//    3.4. To remote CAUI - remove switch VLAN, add METADATA VLAN to be used by 2nd NP (same as overwrite of existing VLAN)
-// 4. From local CAUI -
-//    4.1. To switch - add switch VLAN from "RX copy port" entry
-//    4.2. To host - add METADATA VLAN + constant VLAN representing the local CAUI port.
-//    4.3. To local CAUI - nothing to do
-//    4.4. To remote CAUI - add METADATA VLAN with information about remote CAUI ports to fwd the packet to.
-//
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-MDF_RX_COPY_PORT_LAB:
-
-   Mov uqTmpReg3, 0, 4;
-
-   // Read the entire RX copy port info structure into uqCopyInfo
-   GetRes  uqCopyInfo, COPY_PORT_STR_INFO_BYTE_OFF(MDF_RX_COPY_INFO_STR), COPY_PORT_STR_BYTE_SIZE;
-
-   Mov byAddToRxCopy, 0x10, 1;
-
-MDF_COPY_PORT_START_LAB:
 
    Mov4Bits uqTmpReg2.BITS[ COPY_PORT_CAUI0_BITMAP_BIT,
                             COPY_PORT_CAUI1_BITMAP_BIT,

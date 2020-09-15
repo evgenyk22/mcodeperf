@@ -49,35 +49,54 @@ LDREG   MREG[3],           0x00000001;
 //Halt;
 
 //-------------------------- TOPsearch II lookups ---------------------------------
-public SRC2_FFT_VID_START_LAB:
+#if 1
 
-
-nop;
-nop;
-nop;
-
-	lookup 	CTX CTX_LINE_OUT_IF, FFT_VID_STR, TREG[0], FFT_VID_KEY_SIZE , NO_WR_LAST;
-   
-   halt;
-
-
-#define FFT_VID_STR_IN_TREG         2;
+#define FFT_VID_STR_IN_TREG         96
 #define FFT_VID_STR_SIZE            32;
 #define MDF_VLAN_TX_OFF             2;  // 2 byte Self port TX VLAN; Used for SYN challenge packets
-#define MDF_VLAN_TP_AND_BYPASS_OFF  4;  // 2 byte Packet trace vlan
 #define MDF_VIF_TX_VLAN_OFF         6;  // 2 byte FFT/SFT TX VLAN
-#define MDF_VLAN_TP_ONLY_OFF        MDF_VLAN_TP_AND_BYPASS_OFF;  // 2 byte VLAN for TP only
 #define MDF_FFT_TX_COPY_INFO_OFF    11; // 4 bytes TX copy information
 
-public SRH2_FFT_FRMHOSTTX_LAB:
-/*
-   Nop;
-   Nop;
-   Nop;
-   Nop;
- */
+#define MDF_ROUTE_TX_VLAN_OFF       14;  // 2 byte FFT/SFT TX VLAN
 
-   Lookup   TREG[FFT_VID_STR_IN_TREG+FFT_VID_STR_SIZE], 
+//#define SRC_DEBUG_NOPS
+
+
+
+public SRH2_ROUTE_SYN_LAB:
+
+   // If there is no match - set valid + no match bit
+   MovImm TREG[FFT_VID_STR_IN_TREG], 0x1, 4; 
+
+   Write CTX CTX_LINE_OUT_IF, FFT_VID_STR, TREG[FFT_VID_STR_IN_TREG], 4, TREG[0], 0 , WR_LAST;
+   Halt;
+
+
+public SRH2_ROUTE_2HOST_LAB:
+
+   // If there is no match - set valid + no match bit
+   MovImm TREG[FFT_VID_STR_IN_TREG], 0x1, 4; 
+
+   Write CTX CTX_LINE_OUT_IF, FFT_VID_STR, TREG[FFT_VID_STR_IN_TREG], 4, TREG[0], 0 , WR_LAST;
+   Halt;
+
+
+public SRH2_ROUTE_ALST_LAB:
+
+   // If there is no match - set valid + no match bit
+   MovImm TREG[FFT_VID_STR_IN_TREG], 0x1, 4; 
+
+   Write CTX CTX_LINE_OUT_IF, FFT_VID_STR, TREG[FFT_VID_STR_IN_TREG], 4, TREG[0], 0 , WR_LAST;
+   Halt;
+
+//input tx vlan , packet from host 
+public SRH_FFT_FRMHOSTTX_LAB:
+
+#ifdef SRC_DEBUG_NOPS
+   Nop;
+#endif 
+
+   Lookup   TREG[ FFT_VID_STR_IN_TREG + FFT_VID_STR_SIZE ], 
             TX_COPY_PORT_STR, 
             TREG[0], 
             2, 
@@ -94,289 +113,32 @@ public SRH2_FFT_FRMHOSTTX_LAB:
             8; 
 
 
-   Write CTX CTX_LINE_OUT_IF, FFT_VID_STR, TREG[FFT_VID_STR_IN_TREG], (32-FFT_VID_STR_IN_TREG), TREG[32], FFT_VID_STR_IN_TREG;
-
+   Write CTX CTX_LINE_OUT_IF, FFT_VID_STR, TREG[FFT_VID_STR_IN_TREG], 32 , TREG[0], 0;
    Halt;
 
-// Syn protection label
-public SRH2_FFT_ALST_LAB:
-
-/*
-   Nop;
-   Nop;
-   Nop;
-*/
-	Lookup   TREG[FFT_VID_STR_IN_TREG], FFT_VID_STR, TREG[0], FFT_VID_KEY_SIZE , TREG[0], 0 ,NO_WR_LAST;
-
-   JNoMatch SRH2_FFT_ROUTE_NO_MATCH;
-
-   Lookup   TREG[FFT_VID_STR_IN_TREG+FFT_VID_STR_SIZE], 
-            TX_COPY_PORT_STR, 
-            TREG[FFT_VID_STR_IN_TREG+MDF_VIF_TX_VLAN_OFF], 
-            2, 
-            NO_WR_LAST;
-
-   Write    TREG[FFT_VID_STR_IN_TREG+MDF_FFT_TX_COPY_INFO_OFF],
-            TX_COPY_PORT_STR,
-            TREG[FFT_VID_STR_IN_TREG+FFT_VID_STR_SIZE+1],
-            4; 
-
-   Write CTX CTX_LINE_OUT_IF, FFT_VID_STR, TREG[FFT_VID_STR_IN_TREG], (32-FFT_VID_STR_IN_TREG), TREG[32], FFT_VID_STR_IN_TREG;
-   Halt;
-
-// Syn protection label
-public SRH2_FFT_SYN_LAB:
-/*
-
-   Nop;
-   Nop;
-   Nop;
-*/
-	Lookup   TREG[FFT_VID_STR_IN_TREG], FFT_VID_STR, TREG[0], FFT_VID_KEY_SIZE , TREG[0], 0 ,NO_WR_LAST;
-
-   JNoMatch SRH2_FFT_ROUTE_NO_MATCH;
-
-   Lookup   TREG[FFT_VID_STR_IN_TREG+FFT_VID_STR_SIZE], 
-            TX_COPY_PORT_STR, 
-            TREG[FFT_VID_STR_IN_TREG+MDF_VLAN_TX_OFF], 
-            2, 
-            NO_WR_LAST;
-
-   Write    TREG[FFT_VID_STR_IN_TREG+MDF_FFT_TX_COPY_INFO_OFF],
-            TX_COPY_PORT_STR,
-            TREG[FFT_VID_STR_IN_TREG+FFT_VID_STR_SIZE+1],
-            4; 
-
-   Write CTX CTX_LINE_OUT_IF, FFT_VID_STR, TREG[FFT_VID_STR_IN_TREG], (32-FFT_VID_STR_IN_TREG), TREG[32], FFT_VID_STR_IN_TREG;
-   Halt;
-
-// trace point label   
-public SRH2_FFT_TP_LAB:
-	Lookup   TREG[FFT_VID_STR_IN_TREG], FFT_VID_STR, TREG[0], FFT_VID_KEY_SIZE , TREG[0], 0 ,NO_WR_LAST;
-
-   JNoMatch SRH2_FFT_ROUTE_NO_MATCH;
-
-   Lookup   TREG[FFT_VID_STR_IN_TREG+FFT_VID_STR_SIZE], 
-            TX_COPY_PORT_STR, 
-            TREG[FFT_VID_STR_IN_TREG+MDF_VLAN_TP_AND_BYPASS_OFF], 
-            2, 
-            NO_WR_LAST;
-
-   Write    TREG[FFT_VID_STR_IN_TREG+MDF_FFT_TX_COPY_INFO_OFF],
-            TX_COPY_PORT_STR,
-            TREG[FFT_VID_STR_IN_TREG+FFT_VID_STR_SIZE+1],
-            4; 
-
-   Write CTX CTX_LINE_OUT_IF, FFT_VID_STR, TREG[FFT_VID_STR_IN_TREG], (32-FFT_VID_STR_IN_TREG), TREG[32], FFT_VID_STR_IN_TREG;
-   Halt;
 
 // TX VLAN label
 #define FFT_OFF_TREG 5
 
-public SRH2_FFT_2CPU_CONT_TX_LAB:
-
-#ifdef SRC_DEBUG_NOPS
-   Nop;
-   Nop;
-   Nop;
-   Nop;
-#endif
-
-       
-	Lookup   TREG[FFT_OFF_TREG], FFT_VID_STR, TREG[0], FFT_VID_KEY_SIZE , TREG[0], 0 ,NO_WR_LAST;
-
-
-   JNoMatch SRH2_FFT_ROUTE_NO_MATCH;
-
-   
-   Lookup   TREG[FFT_OFF_TREG + FFT_VID_STR_SIZE], 
-            TX_COPY_PORT_STR, 
-            TREG[FFT_OFF_TREG + MDF_VIF_TX_VLAN_OFF], 
-            2, 
-            NO_WR_LAST;
-
-
-   Write    TREG[FFT_OFF_TREG  + MDF_FFT_TX_COPY_INFO_OFF],
-            TX_COPY_PORT_STR,
-            TREG[ FFT_OFF_TREG + FFT_VID_STR_SIZE + 1 ],
-            4; 
-   
-   Write CTX CTX_LINE_OUT_IF, FFT_VID_STR, TREG[FFT_OFF_TREG], (32-FFT_OFF_TREG), TREG[32], FFT_OFF_TREG;
-
-   Halt;
-
-
-public SRH2_ROUTE_SYN_LAB:
-
-#ifdef SRC_DEBUG_NOPS
-Nop;
-Nop;
-#endif
-
-   // If there is no match - set valid + no match bit
-   MovImm TREG[16], 0x1, 1; 
-
-   Write CTX CTX_LINE_ROUTING_TABLE_RSLT, ROUTING_TABLE_STR, TREG[16], 1;
-
-
-	Lookup   TREG[0], VIF2_TXVLAN_STR, TREG[2], FFT_VID_KEY_SIZE , TREG[0], 0 ,NO_WR_LAST;
-
-   JNoMatch SRH2_FFT_ROUTE_NO_MATCH;
-
-   Lookup   TREG[FFT_VID_STR_IN_TREG+FFT_VID_STR_SIZE], 
-            TX_COPY_PORT_STR, 
-            TREG[4], 
-            2, 
-            NO_WR_LAST;
-
-   Write    TREG[FFT_VID_STR_IN_TREG+MDF_FFT_TX_COPY_INFO_OFF],
-            TX_COPY_PORT_STR,
-            TREG[FFT_VID_STR_IN_TREG+FFT_VID_STR_SIZE+1],
-            4;    
-
-   MovBits TREG[FFT_VID_STR_IN_TREG] , TREG[FFT_VID_STR_IN_TREG + FFT_VID_STR_SIZE ] , 8;
-   Write CTX CTX_LINE_OUT_IF, FFT_VID_STR, TREG[FFT_VID_STR_IN_TREG], (32-FFT_VID_STR_IN_TREG), TREG[32], FFT_VID_STR_IN_TREG ;
-   Halt; 
-#define MDF_ROUTE_TX_VLAN_OFF       14;  // 2 byte FFT/SFT TX VLAN
-
-public SRH2_ROUTE_2HOST_LAB:
-
-#ifdef SRC_DEBUG_NOPS
-   Nop;
-   Nop;
-#endif
-
-   lookup 	TREG[0], ROUTING_TABLE_STR, TREG[0], 2 ,TREG[0], 0 ,NO_WR_LAST;
-   //JNoMatch SRH2_FFT_ROUTE_NO_MATCH;
-   Write CTX CTX_LINE_ROUTING_TABLE_RSLT /*CTX_LINE_OUT_IF*/, ROUTING_TABLE_STR, TREG[0], 32 , TREG[32], 0 ;
-  
-   Halt;
-
- 
-public SRH2_ROUTE_ALST_LAB:
-
-#ifdef SRC_DEBUG_NOPS
-   Nop;
-   Nop;
-#endif
-
-ROUTE_ALST_CONT:
-  
-  Lookup2Dests  TREG[FFT_VID_STR_IN_TREG+64], CTX CTX_LINE_ROUTING_TABLE_RSLT , ROUTING_TABLE_STR, TREG[0], 2 , TREG[0], 0 ,NO_WR_LAST ;
-  //Lookup  TREG[FFT_VID_STR_IN_TREG+64],  ROUTING_TABLE_STR, TREG[0], 2 , TREG[0], 0 ,NO_WR_LAST;
-  //write CTX CTX_LINE_ROUTING_TABLE_RSLT , ROUTING_TABLE_STR , TREG[FFT_VID_STR_IN_TREG+64] , 30 , TREG[0] , 0 , NO_WR_LAST; 
-
-  
-
-  JNoMatch SRH2_FFT_ROUTE_NO_MATCH;
-   
-   MovBits    TREG[FFT_VID_STR_IN_TREG+MDF_ROUTE_TX_VLAN_OFF+66] , TREG[FFT_VID_STR_IN_TREG+MDF_ROUTE_TX_VLAN_OFF+64] , 8; 
-
-   Lookup   TREG[FFT_VID_STR_IN_TREG+FFT_VID_STR_SIZE], 
-            TX_COPY_PORT_STR, 
-            TREG[FFT_VID_STR_IN_TREG+MDF_ROUTE_TX_VLAN_OFF+64 + 1], 
-            2, 
-            NO_WR_LAST;
-
-   Write    TREG[FFT_VID_STR_IN_TREG+MDF_FFT_TX_COPY_INFO_OFF],
-            TX_COPY_PORT_STR,
-            TREG[FFT_VID_STR_IN_TREG+FFT_VID_STR_SIZE+1],
-            4;    
-
-   MovBits TREG[FFT_VID_STR_IN_TREG] , TREG[FFT_VID_STR_IN_TREG + FFT_VID_STR_SIZE ] , 8;
-   Write CTX CTX_LINE_OUT_IF, FFT_VID_STR, TREG[FFT_VID_STR_IN_TREG], (32-FFT_VID_STR_IN_TREG), TREG[32], FFT_VID_STR_IN_TREG ;
-Halt; 
-
 // TX VLAN label
-public SRH2_FFT_TX_LAB:
-
-/*
-   Nop;
-   Nop;
-   Nop;
-   Nop;
-*/
-	Lookup   TREG[FFT_VID_STR_IN_TREG], FFT_VID_STR, TREG[0], FFT_VID_KEY_SIZE , TREG[0], 0 ,NO_WR_LAST;
-
-   JNoMatch SRH2_FFT_ROUTE_NO_MATCH;
-
-   Lookup   TREG[FFT_VID_STR_IN_TREG+FFT_VID_STR_SIZE], 
-            TX_COPY_PORT_STR, 
-            TREG[FFT_VID_STR_IN_TREG+MDF_VIF_TX_VLAN_OFF], 
-            2, 
-            NO_WR_LAST;
-
-   Write    TREG[FFT_VID_STR_IN_TREG+MDF_FFT_TX_COPY_INFO_OFF],
-            TX_COPY_PORT_STR,
-            TREG[FFT_VID_STR_IN_TREG+FFT_VID_STR_SIZE+1],
-            4; 
-
-   Write CTX CTX_LINE_OUT_IF, FFT_VID_STR, TREG[FFT_VID_STR_IN_TREG], (32-FFT_VID_STR_IN_TREG), TREG[32], FFT_VID_STR_IN_TREG;
-   Halt;
-
-
-// TX VLAN label
-public SRH2_FROM_HOST_TX_LAB:
-
-/*
-   Nop;
-   Nop;
-   Nop;
-   Nop;
-*/
-	Lookup   TREG[FFT_VID_STR_IN_TREG], FFT_VID_STR, TREG[0], FFT_VID_KEY_SIZE , TREG[0], 0 ,NO_WR_LAST;
-
-   JNoMatch SRH2_FFT_ROUTE_NO_MATCH;
-
-   Lookup   TREG[FFT_VID_STR_IN_TREG+FFT_VID_STR_SIZE], 
-            TX_COPY_PORT_STR, 
-            TREG[FFT_VID_STR_IN_TREG+MDF_VIF_TX_VLAN_OFF], 
-            2, 
-            NO_WR_LAST;
-
-
-   Write    TREG[FFT_VID_STR_IN_TREG+MDF_FFT_TX_COPY_INFO_OFF],
-            TX_COPY_PORT_STR,
-            TREG[FFT_VID_STR_IN_TREG+FFT_VID_STR_SIZE+1],
-            4; 
-
-   Write CTX CTX_LINE_OUT_IF, FFT_VID_STR, TREG[FFT_VID_STR_IN_TREG], (32-FFT_VID_STR_IN_TREG), TREG[32], FFT_VID_STR_IN_TREG;
-   Halt;
-
-// TP only VLAN label
-public SRH2_FFT_TP_ONLY_VLAN_LAB:
-	Lookup   TREG[FFT_VID_STR_IN_TREG], FFT_VID_STR, TREG[0], FFT_VID_KEY_SIZE , TREG[0], 0 ,NO_WR_LAST;
-
-   JNoMatch SRH2_FFT_ROUTE_NO_MATCH;
-
-   Lookup   TREG[FFT_VID_STR_IN_TREG+FFT_VID_STR_SIZE], 
-            TX_COPY_PORT_STR, 
-            TREG[FFT_VID_STR_IN_TREG+MDF_VLAN_TP_ONLY_OFF], 
-            2, 
-            NO_WR_LAST;
-
-   Write    TREG[FFT_VID_STR_IN_TREG+MDF_FFT_TX_COPY_INFO_OFF],
-            TX_COPY_PORT_STR,
-            TREG[FFT_VID_STR_IN_TREG+FFT_VID_STR_SIZE+1],
-            4; 
-
-   Write CTX CTX_LINE_OUT_IF, FFT_VID_STR, TREG[FFT_VID_STR_IN_TREG], (32-FFT_VID_STR_IN_TREG), TREG[32], FFT_VID_STR_IN_TREG;
-   Halt;
-
 
 SRH2_FFT_ROUTE_NO_MATCH:
 
    // If there is no match - set valid + no match bit
    MovImm TREG[FFT_VID_STR_IN_TREG], 0x1, 4; 
 
-   Write CTX CTX_LINE_OUT_IF, FFT_VID_STR, TREG[FFT_VID_STR_IN_TREG], (32-FFT_VID_STR_IN_TREG), TREG[32], FFT_VID_STR_IN_TREG;
+   Write CTX CTX_LINE_OUT_IF, FFT_VID_STR, TREG[FFT_VID_STR_IN_TREG], 4, TREG[0], 0;
    Halt;
 
 
-public SRH2_RX_COPY_INFO_LAB:
+SRH2_ROUTE_NO_MATCH:
 
-   lookup 	CTX CTX_LINE_RX_COPY_INFO, RX_COPY_PORT_STR, TREG[0], RX_COPY_PORT_KEY_SIZE, TREG[0], 0, NO_WR_LAST;
-   halt;
+   // If there is no match - set valid + no match bit
+   MovImm TREG[FFT_VID_STR_IN_TREG], 0x1, 4; 
+
+   Write CTX CTX_LINE_OUT_IF, FFT_VID_STR, TREG[FFT_VID_STR_IN_TREG], 4 , TREG[0], 0;
+   Halt;
+
 
 
 
@@ -385,7 +147,19 @@ public SRH2_RX_COPY_INFO_LAB:
 
 /* TOPsearch 2 RoutingTable lookup using the index (rank) returned from the TCAM lookup in TOPsearch 1. */
 public SRC2_ROUTING_TABLE_START_LAB:
-	lookup 	CTX CTX_LINE_ROUTING_TABLE_RSLT, ROUTING_TABLE_STR, TREG[0], 2, NO_WR_LAST;
+
+#ifdef SRC_DEBUG_NOPS
+   Nop;
+   Nop;
+   Nop;
+   Nop;
+   Nop;
+#endif
+
+	lookup 	CTX CTX_LINE_ROUTING_TABLE_RSLT, ROUTING_TABLE_STR, TREG[0], 2;
+
+
+
    halt;
 
 //--------------------------------------------------------------------------------
@@ -393,12 +167,7 @@ public SRC2_ROUTING_TABLE_START_LAB:
 
 
 
-//-------------------------- TOPsearch I lookups ---------------------------------
 
-//TopParse LookAside for IPv4DIP match in internal hash table of TOpparse.
-public SRH_PRS_LA_IPV4_DIP_LOOKASIDE_LAB:
-   LookUp CTX CTX_LINE_EZCH_SYSTEMS_IPV4DIP_LA, GRE_MY_IPS_TABLE_STR, TREG[0], 4 , WR_LAST;
-   Halt;
 
 
 /* Issue the DIP lookup in the external TCAM in the routingTableIndex table. */
@@ -462,8 +231,8 @@ MAIN:
 
 Jmul  TREG[UNF_TASK_CNTR],
       EMPTY,
-      EMPTY, 
-      EMPTY,
+      FFT, 
+      ROUTE,
       ACCESS_LIST,
       POLICY , 
       SYN,
@@ -483,8 +252,51 @@ Write OREG , POLICY_RES_CONF_STR , TREG[BDOS_POLICY_RES] , 32  ,  WR_LAST;
 
 Halt;
 
-ACCESS_LIST:
 
+
+ROUTE:
+
+#define TX_COPY_BYPASS  (FFT_VID_STR_IN_TREG + TX_COPY_IN_VID /*10*/)
+#define TX_COPY_SYN     (FFT_VID_STR_IN_TREG + TX_COPY_SYN_IN_VID  /* 24 */)
+
+//jump here if packet from network transparent
+FFT:
+
+	Lookup   TREG[FFT_VID_STR_IN_TREG], FFT_VID_STR, TREG[UNF_VIF_OFF], FFT_VID_KEY_SIZE , TREG[0], 0 ,NO_WR_LAST;
+
+   JMatch VID_MATCH;
+   
+   // If there is no match - set valid + no match bit and halt , no need to continue
+   MovImm TREG[FFT_VID_STR_IN_TREG], 0x1, 4; 
+   Write OREG, FFT_VID_STR, TREG[FFT_VID_STR_IN_TREG], 4, TREG[0], 0, WR_LAST;
+   Halt;
+
+VID_MATCH:
+
+   
+   //Write OREG , FFT_VID_STR, TREG[FFT_VID_STR_IN_TREG], 32, TREG[0], 0 , NO_WR_LAST;
+   
+   //in case of bypass prepare also txcopy
+   Lookup   TREG[TX_COPY_BYPASS] , 
+            TX_COPY_PORT_STR, 
+            TREG[FFT_VID_STR_IN_TREG+MDF_VIF_TX_VLAN_OFF], 
+            2, 
+            NO_WR_LAST;
+
+   //prepare syn protection challenge
+   Lookup   TREG[TX_COPY_SYN], 
+            TX_COPY_PORT_STR, 
+            TREG[FFT_VID_STR_IN_TREG+ MDF_VLAN_TX_OFF], 
+            2, 
+            NO_WR_LAST;
+
+ 
+   Write OREG , FFT_VID_STR, TREG[FFT_VID_STR_IN_TREG], 32, TREG[0], 0 , NO_WR_LAST;
+   jcond;
+   jmp MAIN;
+
+ACCESS_LIST:
+nop;
 LookupTCAM 	   TREG[TREG_TCAM_RESULT_UNF_OFF] , EXT_TCAM_STR,
       			TREG[0], 21,      // DPORT(2), VLAN(2), DIP(16), Phys PORT(1)
                TREG[32], 19,     // SIP(16),  SPORT(2), L4_TYPE(1)

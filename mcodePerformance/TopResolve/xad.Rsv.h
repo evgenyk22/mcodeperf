@@ -22,8 +22,15 @@
 // Global & Local variables:
 
 // The following 2 bytes must remain adjacent since they are written together
-#define byCtrlMsgPrs0               UDB.byte[0];      //1 byte, holds 1st byte of control bits in message from TOPparse to TOPresolve
-#define byCtrlMsgPrs1               UDB.byte[1];      //1 byte, holds 2nd byte of control bits in message from TOPparse to TOPresolve
+#define byCtrlMsgPrs0               UREG[2].byte[0];      //1 byte, holds 1st byte of control bits in message from TOPparse to TOPresolve
+#define byCtrlMsgPrs1               UREG[2].byte[1];      //1 byte, holds 2nd byte of control bits in message from TOPparse to TOPresolve
+
+
+#define byCtrlMsgRsv0               CTX_REG[5].byte[0];
+#define byCtrlMsgRsv1               CTX_REG[5].byte[1];
+#define byCtrlMsgRsv2               CTX_REG[5].byte[2];
+#define byCtrlMsgRsv3               CTX_REG[5].byte[3];
+ 
 
 #define byPolicyValidBitsReg        UDB.byte[2];
 #define byGlobalStatusBitsReg       UDB.byte[3];
@@ -35,11 +42,12 @@
 
 //#define uqBdosTempReg        UREG[2];          //4 bytes
 
-#define uqTmpReg1                   UREG[3];
-#define uqTmpReg2                   UREG[4];
-#define uqTmpReg3                   UREG[5];
-#define uqTmpReg4                   UREG[6];
-#define uqTmpReg5                   UREG[7];
+
+#define uqTmpReg1                   UREG[10] //UREG[3];
+#define uqTmpReg2                   UREG[13] //UREG[4];
+#define uqTmpReg3                   CTX_REG[3] // UREG[5];
+#define uqTmpReg4                   UREG[7]  //UREG[6];
+#define uqTmpReg5                   CTX_REG[4];
 
 #define uqTmpReg6                   SREG_HIGH[11];
 #define uqTmpReg7                   SREG_HIGH[12];
@@ -55,7 +63,7 @@
 #define uqTmpReg10                  UREG[14];
 // UREGs 8 & 9 are saved for statistics result
 
-#define uqTmpReg11                  UREG[10];
+#define uqTmpReg11                 CTX_REG[5] ;
 
 
 
@@ -74,16 +82,14 @@
 #define RTPC_IS_DOUBLE_COUNT_BIT    byTempCondByte3.bit[3];
 
 
-#define uxTmpReg1                   UREG[13].byte[0];
-#define uxTmpReg2                   UREG[13].byte[2];
+#define uxTmpReg1                   CTX_REG[2].byte[0];
+#define uxTmpReg2                   CTX_REG[2].byte[2];
                             
 
 #define byFrameActionReg            UREG[15].byte[0]; //1 byte, holds the action that should be performed on the frame
 #define byPolicyOOSActionReg        UREG[15].byte[1]; //1 byte uses temporary as storage of OOS action set
 
 // The following 2 bytes must remain adjacent since they are read\written together
-#define byCtrlMsgRsv0               UREG[15].byte[2]; //1 byte, holds 1st byte of control bits to put in message from TOPresolve to TOPmodify
-#define byCtrlMsgRsv1               UREG[15].byte[3]; //1 byte, holds 2nd byte of control bits to put in message from TOPresolve to TOPmodify
 
 #define uqGlobalStatusBitsReg       MEM_REG[12];
 
@@ -243,7 +249,7 @@ LDREG   SYN_PROT_TS_LIMITS_MREG,   0xFF00;    // Default value - allow all (if n
 
 #define RSV_ROUTE_SYN_LKP_HDR             (LKP_VALID   | ( SRH2_ROUTE_SYN_LAB << HREG_FIRST_LINE_ADDR_BIT) | (((RSV_ROUTE_SYN_LKP_SIZE - 1) >> 4) << HREG_KEY_SIZE_BIT) | (KEY_TYPE_1 << HREG_KEY_TYPE_BIT));
 
-#define RSV_FFT_TP_LKP_HDR              (LKP_VALID   | ( SRH2_FFT_TP_LAB << HREG_FIRST_LINE_ADDR_BIT) | (((RSV_FFT_TX_COPY_PORT_LKP_KEY_SIZE - 1) >> 4) << HREG_KEY_SIZE_BIT) | (KEY_TYPE_1 << HREG_KEY_TYPE_BIT));
+//#define RSV_FFT_TP_LKP_HDR              (LKP_VALID   | ( SRH2_FFT_TP_LAB << HREG_FIRST_LINE_ADDR_BIT) | (((RSV_FFT_TX_COPY_PORT_LKP_KEY_SIZE - 1) >> 4) << HREG_KEY_SIZE_BIT) | (KEY_TYPE_1 << HREG_KEY_TYPE_BIT));
 #define RSV_FFT_TX_LKP_HDR              (LKP_VALID   | ( SRH2_FFT_TX_LAB << HREG_FIRST_LINE_ADDR_BIT) | (((RSV_FFT_TX_COPY_PORT_LKP_KEY_SIZE - 1) >> 4) << HREG_KEY_SIZE_BIT) | (KEY_TYPE_1 << HREG_KEY_TYPE_BIT));
 #define RSV_FFT_VLAN_TP_ONLY_LKP_HDR    (LKP_VALID   | ( SRH2_FFT_TP_ONLY_VLAN_LAB << HREG_FIRST_LINE_ADDR_BIT) | (((RSV_FFT_TX_COPY_PORT_LKP_KEY_SIZE - 1) >> 4) << HREG_KEY_SIZE_BIT) | (KEY_TYPE_1 << HREG_KEY_TYPE_BIT));
 #define RSV_HOST_TX_LKP_HDR             (LKP_VALID   | ( SRH2_FFT_FRMHOSTTX_LAB << HREG_FIRST_LINE_ADDR_BIT) | (((RSV_FFT_TX_COPY_PORT_LKP_KEY_SIZE - 1) >> 4) << HREG_KEY_SIZE_BIT) | (KEY_TYPE_1 << HREG_KEY_TYPE_BIT));
@@ -256,8 +262,9 @@ LDREG   SYN_PROT_TS_LIMITS_MREG,   0xFF00;    // Default value - allow all (if n
 #define RSV_ROUTING_TABLE_LKP_SIZE 2;
 #define RSV_ROUTING_TABLE_LKP_HDR     (LKP_VALID | ( SRC2_ROUTING_TABLE_START_LAB << HREG_FIRST_LINE_ADDR_BIT) | (((RSV_ROUTING_TABLE_LKP_SIZE - 1) >> 4) << HREG_KEY_SIZE_BIT) | (KEY_TYPE_1 << HREG_KEY_TYPE_BIT));
 
+#define RSV_MSG_SIZE 96
 
-#define RSV_MSG_HDR   (MSG_VALID | (MSG_STR << HREG_STR_NUM_BIT)  | (((MSG_SIZE - 1  ) >> 4) << HREG_MSG_SIZE_BIT));
+#define RSV_MSG_HDR   (MSG_VALID | (MSG_STR << HREG_STR_NUM_BIT)  | (((RSV_MSG_SIZE - 1  ) >> 4) << HREG_MSG_SIZE_BIT));
 // #define SC_CK_KEY_CUR_MREG    MREG[14];
 // #define SC_CK_KEY_PREV_MREG   MREG[13];
 // #define SC_CK_STMP_MREG       MREG[12];

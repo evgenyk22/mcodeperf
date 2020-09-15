@@ -33,22 +33,22 @@ description "Version 1.96.00.00 Generic Mode";
 #define byTempCondByte3                UREG[1].byte[2];
 #define byTempCondByte4                UREG[1].byte[3];
 
-#define uqTmpReg0                      UREG[3];
-#define uqOffsetReg0                   UREG[2];
-#define uqInReg                        UREG[4]; 
+#define uqTmpReg0                      CTX_REG[10] //UREG[3];
+#define uqOffsetReg0                   UREG[4];
+#define uqInReg                        CTX_REG[11] ; 
 
 
-#define uqTmpReg3                      UREG[5];
-#define uxTmpReg1                      UREG[5].byte[0];
-#define uxTmpReg2                      UREG[5].byte[2];
+#define uqTmpReg3                      UREG[13];
+#define uxTmpReg1                      UREG[13].byte[0];
+#define uxTmpReg2                      UREG[13].byte[2];
 
-#define uqTmpReg4                      UREG[6];
-#define uqTmpReg5                      UREG[7];
+#define uqTmpReg4                      CTX_REG[8]; //UREG[6];
+#define uqTmpReg5                      CTX_REG[9]; //UREG[7];
 
-#define uqFramePrsReg                  UREG[13];
-          
+#define uqFramePrsReg                  UREG[5];
+                                                
 #define uqTmpReg1                      UREG[14];
-#define uqTmpReg2                      UREG[11];          //4 bytes, Parsing errors indication register
+#define uqTmpReg2                      UREG[11];          //4bytes, Parsing errors indication register
 
 #define bytmp                          uqTmpReg2.byte[0];
 #define bytmp1                         uqTmpReg2.byte[1];
@@ -64,8 +64,8 @@ description "Version 1.96.00.00 Generic Mode";
 #define uqTmpReg7                      EXT_REG[9];
 #define byL4Proto                      EXT_REG[9].byte[0];
 //#define uqTmpReg8 obsolete
-#define byHashVal                      EXT_REG[10].byte[0];   //1 byte
-#define uxHash2BVal                    EXT_REG[10].byte[1];   //2 byte
+
+#define uxHash2BVal                    /*EXT_REG[10]*/UREG[3].byte[1];   //2 byte
 /* 
    Netstack  indication
    ARP,
@@ -95,11 +95,20 @@ description "Version 1.96.00.00 Generic Mode";
 //#define uqFramePrsReg                  UREG[14];
 
 // The following 2 bytes must remain adjacent since they are read together
-#define byCtrlMsgPrs0                  UREG[15].byte[0];  //1 byte, holds 1st byte of control bits in message from TOPparse to TOPresolve
-#define byCtrlMsgPrs1                  UREG[15].byte[1];  //1 byte, holds 2nd byte of control bits in message from TOPparse to TOPresolve
 
-#define byFrameActionReg               UREG[15].byte[2];  //1 byte, holds the action that should be performed on the frame
-#define bySrcPortReg                   UREG[15].byte[3];  //1 byte, holds physical source port according to FFT lookup
+#define byCtrlMsgPrs0                  /*UREG[15]*/UREG[2].byte[0];  //1 byte, holds 1st byte of control bits in message from TOPparse to TOPresolve
+#define byCtrlMsgPrs1                  /*UREG[15]*/UREG[2].byte[1];  //1 byte, holds 2nd byte of control bits in message from TOPparse to TOPresolve
+#define byCtrlMsgPrs2                              UREG[2].byte[2];  //1 byte, holds 3rd byte of control bits in message from TOPparse to TOPresolve
+#define byCtrlMsgPrs3                /*CTX_REG[6]*/UREG[2].byte[3]; //compleate with next merge   
+
+
+
+#define byFrameActionReg               UREG[6].byte[0];  //1 byte, holds the action that should be performed on the frame
+#define bySrcPortReg                   UREG[6].byte[1];  //1 byte, holds physical source port according to FFT lookup
+#define byVifPortReg                   UREG[6].byte[2];
+#define byHashVal                      UREG[6].byte[3];
+
+#define R_PC                           UREG[7];
 
 #define CNVI                           CTX_REG[0];
 #define uqTmpCtxReg1                   CTX_REG[1];
@@ -144,13 +153,13 @@ description "Version 1.96.00.00 Generic Mode";
 #define byCntrlPayload                         CTX_REG[5].byte[1]; // YanivBe: bit[0] is set if a packet has payload
 #define uxCntrlGenDecoder                      CTX_REG[5].byte[2]; // 2 bytes Store some General Decoder info
 #define byCtrlFree                             CTX_REG[6].byte[0]; // 1 byte not in use
-#define byCtrlMsgPrs2                          CTX_REG[6].byte[1];  //1 byte, holds 3rd byte of control bits in message from TOPparse to TOPresolve
 
-#define bitPRS_hasRxCopyPort                   byCtrlMsgPrs2.BIT[MSG_CTRL_TOPPRS_2_HAS_RX_COPY_BIT];
-#define bitPRS_isSltVlanMode                   byCtrlMsgPrs2.BIT[MSG_CTRL_TOPPRS_2_SLT_VLAN_BIT];
+
+//#define bitPRS_hasRxCopyPort                   byCtrlMsgPrs2.BIT[MSG_CTRL_TOPPRS_2_HAS_RX_COPY_BIT];
+//#define bitPRS_isSltVlanMode                   byCtrlMsgPrs2.BIT[MSG_CTRL_TOPPRS_2_SLT_VLAN_BIT];
 
 #define byGlobConfReg                          CTX_REG[6].byte[2];
-#define byCtrlMsgPrs3                          CTX_REG[6].byte[3]; //compleate with next merge   
+
 //                                             CTX_REG[8:15]; // used to read the lookup result in the IPv4_DIP LookAside. may be overwritten for any purpose of the application after the code finished the IPv4 LookAside in xad.Prs.asm.
 
 // Support up to 2 levels inspection of encapsulated frames (RadwareGRETunnel, even if exist, does not count in this calculation, i.e. even if RadwareGRETunnel exist or does not

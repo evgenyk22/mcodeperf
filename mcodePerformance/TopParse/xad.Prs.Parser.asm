@@ -202,12 +202,12 @@ Jmul UNS_L3_PROT_LAB,      // Protocol type 0x8864 (PPPoE, unsupported)
 UNS_L3_PROT_LAB:
 
 MovBits  CAMO.bit[30] , byCtrlMsgPrs2.BIT[MSG_CTRL_TOPPRS_2_IS_CAUI_PORT_BIT] , 1;
-Mov FMEM_OFFSET0 , -0x14 , 2;
+Mov FMEM_OFFSET1 , -0x14 , 2;
 get      CAMIH.BYTE[ 2 ], -2(FMEM_BASE), 2;
-If (CAMO.bit[30])  Mov FMEM_OFFSET0 , -0xe , 2;
+If (CAMO.bit[30])  Mov FMEM_OFFSET1 , -0xe , 2;
 Nop;
 Nop;
-get      CAMI.BYTE[ 0 ] , FMEM_OFFSET0(FMEM_BASE), 6;
+get      CAMI.BYTE[ 0 ] , FMEM_OFFSET1(FMEM_BASE), 6;
 lookcam  CAMO, CAMI, TCAM64[ LACP_GROUP ], KEY_SIZE 8;
 nop;
 nop;
@@ -823,9 +823,9 @@ IPv6_LAND_CONT:
 // Return FMEM_BASE on next header start
 Add FMEM_BASE, FMEM_BASE, IPv6_BASE_SIZE, 2;
 // Prepare for parsing extention headers and for jump             
-Mov uqTmpReg5, PC_STACK, 2, RESET;
+Mov /*uqTmpReg5*/ALU, PC_STACK, 2, RESET;
 Mov bytmp2, sIpv6ProtDec_HWD4_byNextProtHdr, 1; // Get next header protocol type, GuyE: 6.3.2014 needed???
-
+Mov uqTmpReg5 , ALU , 4;
 //Mov FMEM_OFFSET1 , IPv6_NEXT_HEADER_OFF , 2 ; 
 
 // Copy decoded protocol type to ENC_PRI (to prepare the protocol decoder Jmul)
@@ -1746,7 +1746,6 @@ Nop;
 
 If (FLAGS.BIT[F_ZR]) MovBits uqInReg.BIT[L4_PAYLOAD_LEN_ERR_OFFSET], 1, 1;
 
-//If (!FLAGS.BIT[F_ZR]) MovBits byCtrlMsgPrs1.bit[MSG_CTRL_TOPPRS_1_L3_TUNNEL_EXISTS_BIT], 1, 1; 
 
 Sub ALU, sHWD_uxFrameLen, PORT_CFG2.byte[JUMBO_PCKT_CREG2_OFF], 2;   // sHWD_uxFrameLen = HWD_REG0.byte[2] // ##AMIT_GUY is the value in PORT_CFG2.byte[JUMBO_PCKT_CREG2_OFF] folding the minimum size to define a jumbo frame?
    PutKey MSG_L3_USR_OFF(HW_KBS), uqOffsetReg0.byte[L3_OFFB], 4;     // initialize in the message both MSG_L3_USR_OFF and MSG_L4_USR_OFF from uqOffsetReg0.byte[L3_OFFB] and uqOffsetReg0.byte[L4_OFFB]

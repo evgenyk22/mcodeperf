@@ -32,8 +32,22 @@ Eztop Parse;
 #include "xad.prs.packetanomalies.h"
 #include "xad.Prs.PacketAnomalies.asm"
 #include "xad.Prs.Acl.asm"
+#include "rsv_labels.h"
 
-LdThrowLabel GLOB_ANOMALY_LAB; 
+
+ 
+LdThrowLabel GLOB_ANOMALY_LAB;
+
+#define CTX_LINE_TOPS 0
+
+LdMsgHdr PRS_MSG_HDR;
+
+
+ldreg uqOffsetReg0 , 0;
+//ldreg UREG[6] , 0;
+ldreg UREG[4] , 0;
+ldreg uqCondReg   , 0;
+ 
 //#include "portConfig.h"
 /*
 LdPortDir 103,2; 
@@ -133,8 +147,8 @@ LdPortFlow 117, 3;
    This will be overwritten later on if required conditions are met (RadwareGRETunnel frames is discovered).
    Note: Other bits are also set now to zero. this should be changed as soon as more bits will be populated to MSG_CTRL_TOPPRS_2_OFF */
 MovBits CAMO.bit[16] , sHWD_bitsDirection, 5; 
-PutKey MSG_CTRL_TOPPRS_2_OFF(HW_KBS), 0, 1;
-
+//PutKey MSG_CTRL_TOPPRS_2_OFF(HW_KBS), 0, 1;
+Mov  R_PC , CONT_LAB , 4;
 //Decode_General 0(FMEM_BASE);	 // NP4 does not make HW parsing like NP3, that's why we use this command (we can optimize by removing decoding for packets arrived from CPU)
 
 
@@ -208,6 +222,10 @@ jmp  FRAME_FROM_NW_LAB, NOP_2;
     
 
 FRAME_FROM_HOST_LAB:   
+
+jmp ERROR_HANDLING, NOP_2;
+
+
 if       ( !FLAGS.BIT [ F_MCC ] )  jmp   $, NO_NOP;
     Mov FMEM_BASE ,0 , 2;
     Nop;
@@ -216,7 +234,8 @@ MovBits ALU , sHWD_bitsLayer3Offset , 5 , RESET;
 Add  uxCntrlGenDecoder , ALU , 8 , 2;
 
 Get ALU , ETH_VID1_OFF(FMEM_BASE), 2, SWAP;
-PutKey MSG_NP5_INTERFACE_PORT_NUM_OFF(HW_KBS) , HWD_REG1.byte[1] , 1  ; //##TODO_OPTIMIZE: check all nops after JMULs and verify if this can be done in case of jump immediately after the JMUL.
+//PutKey MSG_NP5_INTERFACE_PORT_NUM_OFF(HW_KBS) , HWD_REG1.byte[1] , 1  ; //##TODO_OPTIMIZE: check all nops after JMULs and verify if this can be done in case of jump immediately after the JMUL.
+nop;
 PutKey MSG_SWITCH_VLAN_FROM_HOST(HW_KBS) ,  ALU, 2;
 
 
@@ -300,9 +319,10 @@ FRAME_FROM_NW_LAB:
    Mov FMEM_BASE, uqOffsetReg0.byte[L3_OFFB], 2;
    
    //Mov $uxVlanTag0Id , uqTmpReg7.byte[2] , 2;
-   PutKey MSG_VIF_OFF(HW_KBS), PORT_DATA0, 1;
+   PutKey UNF_VIF_OFF(COM_KBS), PORT_DATA0, 1;
+   Mov byVifPortReg , PORT_DATA0, 1;
    PutKey MSG_POLICY_ID_OFF(HW_KBS), DEF_POLICY_METADATA_ID, 2; // Init default policy ID value
-   PutKey MSG_NP5_INTERFACE_PORT_NUM_OFF(HW_KBS) , HWD_REG1.byte[1] , 1  ; //##TODO_OPTIMIZE: check all nops after JMULs and verify if this can be done in case of jump immediately after the JMUL.
+   //PutKey MSG_NP5_INTERFACE_PORT_NUM_OFF(HW_KBS) , HWD_REG1.byte[1] , 1  ; //##TODO_OPTIMIZE: check all nops after JMULs and verify if this can be done in case of jump immediately after the JMUL.
     
    Mov byFrameActionReg, FRAME_BYPASS_HOST, 1;
    Copy   MSG_SIP_OFF(HW_KBS ), IP_SIP_OFF (FMEM_BASE),4, SWAP;
@@ -363,7 +383,10 @@ MovBits ALU, CAMO.bit[FFT_VIF_DATA_VIFID_OFF], FFT_VIF_DATA_VIFID_SIZE, RESET;
    //If (!bitPRS_isRoutingMode) jmp PER_VIF_COUNTING_LAB, NO_NOP; // In transparent mode the result of DMAC_NO_MATCH is ignored
       // Save physical port
 MovBits bySrcPortReg, CAMO.bit[FFT_VIF_DATA_PHYSPRT_OFF], FFT_VIF_DATA_PHYSPRT_SIZE;
-PutKey MSG_VIF_OFF(HW_KBS), ALU, 1;
+PutKey UNF_VIF_OFF(COM_KBS), ALU, 1;
+Mov byVifPortReg , ALU, 1;
+
+
 
 PER_VIF_COUNTING_LAB:
 
@@ -378,7 +401,7 @@ Mov ALU , PA_CHECK_ONLY , 4;
 
 Putkey UNF_PROT_POLICY_PHASE_OFF(COM_KBS), uqGcCtrlReg0.byte[2], CMP_POLICY_PHASE_SIZE;  
 
-PutKey MSG_SRC_PORT_OFF(HW_KBS), bySrcPortReg, 1; // ##TODO_OPTIMIZE - check option to move this line to after the JMUL. also check if this can be repleaced with the source port from the HW_MSG (not the lookup result of the VIF table, as implemented today). see comment near the definition of the constant MSG_SRC_PORT_OFF.
+//PutKey MSG_SRC_PORT_OFF(HW_KBS), bySrcPortReg, 1; // ##TODO_OPTIMIZE - check option to move this line to after the JMUL. also check if this can be repleaced with the source port from the HW_MSG (not the lookup result of the VIF table, as implemented today). see comment near the definition of the constant MSG_SRC_PORT_OFF.
 PutKey UNF_PROT_VLAN_OFF (COM_KBS), $usrVlanTag , 2;
 
 
@@ -389,6 +412,8 @@ If (CAMO.bit [SSL_PORT_DET]) Mov byFrameActionOverrideReg , FRAME_BYPASS_HOST  ,
 Mov ALU,0,4; 
 Mov4Bits ALU.bits[4,3,2,1] , uqGcCtrlReg0.bits[GC_CNTRL_0_ALIST_NONE_EMPTY_BIT,GC_CNTRL_0_POLICY_NON_EMPTY_BIT,GC_CNTRL_0_PROT_DST_NONE_EMPTY_BIT,GC_CNTRL_0_BDOS_EMPTY_SIG_BIT];
 PutHdr  HREG[ 1 ], MAIN_LKP;
+Mov2Bits ALU.bits[6,5] , uqGcCtrlReg0.bits[ ~GC_CNTRL_0_ROUTING_ENABLED_BIT , GC_CNTRL_0_ROUTING_ENABLED_BIT];
+nop;
 PutKey UNF_TASK_CNTR(COM_KBS), ALU , 1; 
 
  
@@ -520,7 +545,8 @@ FRAME_CONT_ACTION_LAB:
 //       running parsing code.
 
    Xor ALU, $usrVlanTag, uqTmpReg1, 2;// Silicom packet check: Comparison
-      movbits byTempCondByte1.BIT[MSG_CTRL_TOPPRS_2_SLT_VLAN_BIT], bitPRS_isSltVlanMode, 1;
+      //movbits byTempCondByte1.BIT[MSG_CTRL_TOPPRS_2_SLT_VLAN_BIT], bitPRS_isSltVlanMode, 1;
+   nop;
    JZ HOST_P0_BYPASS_LAB, NO_NOP;       // Silicom packet check: TO_CPU if it is Silicom packet
       Xor ALU, byFrameActionOverrideReg, FRAME_BYPASS_HOST, 1;//check if an override action is set
       Mov byFrameActionReg, FRAME_CONT_ACTION, 1;
@@ -528,7 +554,7 @@ FRAME_CONT_ACTION_LAB:
 varundef usrVlanTag;
 
 
-If (byTempCondByte1.BIT[MSG_CTRL_TOPPRS_2_SLT_VLAN_BIT]) Jmp PRS_SLT_VLAN_LAB, NOP_1;
+//If (byTempCondByte1.BIT[MSG_CTRL_TOPPRS_2_SLT_VLAN_BIT]) Jmp PRS_SLT_VLAN_LAB, NOP_1;
    movbits IP_VERSION_BIT, sHWD_bitL3IsIpV6  , 1; //IP_VERSION_BIT (UREG[1].byte[0]) might be overridden in parseFrameWithPA
 
 
@@ -1253,7 +1279,8 @@ if (tmp_FLAGS_REG.bit[TCP_PSH_FLAG_OFF]) jmp CALC_HASH_LOCAL, NOP_2;
 // Although, if this is SYN, perhaps we still need to calculate 
 // Hash function for SYN-Cookie calculation?
 
-jmp PRS_DONE_LAB , NOP_1;
+jmp PRS_DONE_LAB;
+  MovBits byCtrlMsgPrs0.bit[MSG_CTRL_TOPPRS_0_PERFORM_SYN_PROT_BIT] , 1 , 1;
   // Unset OOS control bits
   movbits byCtrlMsgPrs0.bit[MSG_CTRL_TOPPRS_0_TCP_OOS_SYN_ACK_BIT], 0, 3;
 //  movbits uqGcCtrlReg0.bit[GC_CNTRL_0_TCP_OOS_POLICY_CLASS_BIT], 0, 1;
@@ -1287,15 +1314,20 @@ PRS_DONE_LAB:
 
 BuildMsg;
 
-PutHdr HREG[ 0 ], PRS_MSG_HDR;   // Write the message header 
+//PutHdr HREG[ 0 ], PRS_MSG_HDR;   // Write the message header 
 
 //TODO_OPTIMIZE: consider issueing the TCAM Lookup using LookAside (i.e. before the halt) in order to start it as soon as possible to minimize the latency.
 // For Ext.TCAM lookaside:
 //EZwaitFlag F_HREG7_REUSE;
 //PutHdrBits HREG[7].BIT[HREG_VALID_BIT], 0, 1; // Clear the valid bit of HREG[6], in order to prevent its lookup from being re-sent at the halt command.
 //EZwaitFlag F_CTX_LA_RDY_0;
+//PutKey UNF_VIF_OFF(COM_KBS), 0xc , 1;
+Halt UNIC,HW_MSG_HDR , 
+		  ST_UREG_0_7 CTX_LINE_TOPS,  // Save UREGs 0_7 to context memory
+		  LD_UREG_0_7 CTX_LINE_TOPS,  // Load UREGs 0_7 from context memory in TOPresolve
+		  LD_PC_UREG_7;               // Start next TOP program execution at LAB from UREG[7]
+	
 
-Halt UNIC,HW_MSG_HDR;
 
 
 
@@ -1500,17 +1532,8 @@ jmp CALC_ACK_HASH_DONE , NOP_2;
 */                                      
 
 
-UNEXPECTED_FRAME_NO_VLANS_AT_ALL_LAB:
-/* Frame contains no VLANs at all, i.e. even no switch VLAN in the frame - this case should never occure. */
-EZstatIncrByOneIndexImm ROUTING__L_CNTR__SUBIF;
-
-jmp GLOB_CONF_DROP_LAB_CONT, NOP_2;
 
 
-PRS_SLT_VLAN_LAB:
-   
-   Jmp PRS_DONE_LAB, NOP_1;
-      Mov byFrameActionReg, FRAME_BYPASS_NETWORK, 1;
 
 
 ////////////////////////////////////////////////////////////
@@ -1523,6 +1546,7 @@ PRS_SLT_VLAN_LAB:
 ////////////////////////////////////////////////////////////
 FRAME_FROM_2ND_NP_LAB:
 
+jmp ERROR_HANDLING, NOP_2;
 // Based on the frame's metadata sent from other NP, determine which CAUI ports should be targeted.
 Get UREG[1], ETH_VID_OFF(FMEM_BASE), 2, SWAP;
 Mov uqTmpReg2, 0, 2; // reset bytmp and bytmp1
@@ -1534,7 +1558,7 @@ If (UREG[1].BIT[1])
    Mov bytmp1, (NP_CAUI_1_PORT_NUMBER | NP_CAUI_PORT_VALID), 1;
 
 Mov byFrameActionReg, FRAME_BYPASS_NETWORK, 1;
-PutKey MSG_NP5_INTERFACE_PORT_NUM_OFF(HW_KBS) , HWD_REG1.byte[1] , 1  ; //##TODO_OPTIMIZE: check all nops after JMULs and verify if this can be done in case of jump immediately after the JMUL.
+//PutKey MSG_NP5_INTERFACE_PORT_NUM_OFF(HW_KBS) , HWD_REG1.byte[1] , 1  ; //##TODO_OPTIMIZE: check all nops after JMULs and verify if this can be done in case of jump immediately after the JMUL.
 
 Jmp PRS_DONE_LAB, NO_NOP;
    // Set control message bit to indicate that the packet is from peer NP device.

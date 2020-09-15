@@ -456,20 +456,23 @@ MACRO BuildMsg;
 
 //assume that HWD_REG5 still contained hash core calculated by decode_ipv4 decode_ipv6
     PutKey   0(HW_KBS), MSG_HDR, 1;   // Put message header     // ##TODO_OPTIMIZE - when will have time for this - as this uses temp register from within a mcaro, add vardef for this register in all the locations that uses it.
+    //PutKey UNF_VIF_OFF(COM_KBS), byVifPortReg, 1;
+
 // Put in the message the folded xor result of the IPv4 SIP + DIP hash result.
    //    Xor ALU, HWD_REG5.byte[0], HWD_REG5.byte[1], 1; // HWD_REG5.byte[0..1] = sIpv4ProtDec_HWD5_uxSipDipHashRes
-   PutKey MSG_HASH_CORE_OFF( HW_KBS ), byHashVal, 1;
-   PutKey   MSG_ACTION_ENC_OFF(HW_KBS), byFrameActionReg, 1;
+   //PutKey MSG_HASH_CORE_OFF( HW_KBS ), byHashVal, 1;
+   //PutKey   MSG_ACTION_ENC_OFF(HW_KBS), byFrameActionReg, 1;
 
    // Use hash value for deciding on FLOW number.NP5 has 16 flows
    MovBits FLOW_NUM, byHashVal, 4;
 // calculate RT monitoring counter offset: [7:3] - physical port; [2:0] - protocol
-   MovBits  byTempCondByte1.bit[0], uqFramePrsReg.BIT[L4_TYPE_OFF], 3;
-   MovBits  byTempCondByte1.bit[3], bySrcPortReg, 5; //max phys port range 0-0x1f
-   PutKey   MSG_CTRL_TOPPRS_0_OFF(HW_KBS), byCtrlMsgPrs0,   2; // Writing 2 ctrl bytes (both byCtrlMsgPrs0 and byCtrlMsgPrs1) in 1 operation to both MSG_CTRL_TOPPRS_0_OFF and MSG_CTRL_TOPPRS_1_OFF
-   PutKey   MSG_CTRL_TOPPRS_2_OFF(HW_KBS), byCtrlMsgPrs2,   1; // Writing 3rd control bits
-   PutKey   MSG_SRC_PRT_OFF (HW_KBS),      byTempCondByte1, 1;
-   PutKey  MSG_L3_USR_OFF(HW_KBS), uqOffsetReg0.byte[L3_OFFB], 4; // initialize in the message both MSG_L3_USR_OFF and MSG_L4_USR_OFF from uqOffsetReg0.byte[L3_OFFB] and uqOffsetReg0.byte[L4_OFFB]
+   //MovBits  byTempCondByte1.bit[0], uqFramePrsReg.BIT[L4_TYPE_OFF], 3;
+   //MovBits  byTempCondByte1.bit[3], bySrcPortReg, 5; //max phys port range 0-0x1f
+   
+   //PutKey   MSG_CTRL_TOPPRS_0_OFF(HW_KBS), byCtrlMsgPrs0,   2; 
+   //PutKey   MSG_CTRL_TOPPRS_2_OFF(HW_KBS), byCtrlMsgPrs2,   1; 
+   //PutKey   MSG_SRC_PRT_OFF (HW_KBS),      byTempCondByte1, 1;
+   //PutKey  MSG_L3_USR_OFF(HW_KBS), uqOffsetReg0.byte[L3_OFFB], 4; 
 
 ENDMACRO; //BuildMsg
 
@@ -604,193 +607,7 @@ Add    COM_KBS, COM_KBS, CMP_POLICY_KMEM_SIZE, 2;
 ENDMACRO; //SetPolicyHeaders
 
 
-//-------------------------------------------------------//
-//                MACRO SynFloodPrs                      //
-//-------------------------------------------------------//
-// Note: I do not mind duplicating code for Cookie calculation,
-// Because Syn-Flood protection and TCP OOS will never both be performed for 
-// the same packet.
 
-MACRO SynFloodPrs;
-ENDMACRO; //SynFloodPrs
-
-
-
-//-------------------------------------------------------//
-//            MACRO ParseControlMessage                  //
-//-------------------------------------------------------//
-
-// This macro is used to parse the message that arrives from the host (for OOS feature only), 
-// it looks for up to 15 keys (4 bytes each, 4x15 = 60 bytes) and then allocates a message 
-// to be sent to TOPresolve and there to be learned by High learn
-
-MACRO ParseControlMessage Err_Handler, DISCARD_LAB;
-
-vardef volatile regtype GC_INB_REPRT_REG  uqTmpReg4;
-vardef volatile regtype GC_INB_ERROR_REG  uqTmpReg5; 
-#define MSG_COMMANDS_MAX 4;
-
-
-Get uqTmpReg2, CTRL_FRAME_SEQ_NUM_OFF  (0), 4; // Do we need to swap here?
-Mov ALU, HWD_REG1.byte[1] , 1; // get physical port
-Sub ALU, ALU, PRT_CFG1, 1;     // Check whether control message arrived from Host instance (interface) 0 or 1
-
-
-Mov uqTmpReg6, uqTmpReg2.byte[3], 1; // Get counter id
-
-
-Mov $GC_INB_REPRT_REG, GC_INB_REPRT, 4;
-Mov $GC_INB_ERROR_REG, GC_INB_ERROR, 4;
-
-jz OOS_CNTR_MSG_CONT, NOP_2;
-
-Mov $GC_INB_REPRT_REG, GC_INB_REPRT_INST1, 4;
-Mov $GC_INB_ERROR_REG, GC_INB_ERROR_INST1, 4;
-
-OOS_CNTR_MSG_CONT:
-
-
-Add $GC_INB_REPRT_REG, $GC_INB_REPRT_REG, uqTmpReg6, 4;
-
-SHL uqTmpReg6, uqTmpReg6, 19, 4; // prepare STAT_REG1 format bit offset[24:19]; size[18:17] = 0(1 bit); value - 0/1
-
-
-// Start critical region
-//EZwaitFlag F_ORD;
-
-//for debug: EZstatSendCmdIndexReg $GC_INB_REPRT_REG, STS_READ_CMD;      // Read Seq. number counter    
-EZstatSendCmdIndexReg $GC_INB_REPRT_REG, STS_INCR_BY_1_READ_CMD;  // increment and read old number counter 
-
-// End critical region
-//Mov ORDERING_REG, 1, 1;
-
-Get uqTmpReg1, CTRL_FRAME_CMD_COUNT_OFF(0), 2, RESET;
-Get uqTmpReg3, CTRL_FRAME_MSG_SIZE_OFF(0), 2, RESET;
-Mov uqTmpReg2.byte[3], 0, 1;
-Mov FMEM_BASE, CTRL_FRAME_FIRST_COMMAND_OFF, 2;
-Mov ALU, uqTmpReg2, 4;
-
-// Wait until counter value is ready
-if (!FLAGS.bit[F_SR]) Jmp $, NOP_2;     
-
-
-Sub ALU, ALU, 1, 4;
-Sub ALU, ALU, STAT_RESULT_L , 4, MASK_00FFFFFF, MASK_BOTH;  // Check if Seq. number == read counter + 1 
-Nop;
-
-jz CORRECT_SEQUENCE, NOP_1;
-
-   Mov uqTmpReg6.byte[0], 0, 1;
-
-// for debug jmp CORRECT_SEQUENCE, NOP_2;
-
-
-EZstatDecrByOneIndexReg $GC_INB_REPRT_REG;
-Mov uqTmpReg6.byte[0], 1, 1;
-EZstatPutDataSendCmdIndexReg $GC_INB_ERROR_REG, uqTmpReg6, STS_BW_WR_CMD; // If Seq. number is not correct - increment error counter and quit
-
-Nop;
-Nop;
-
-
-jmp DISCARD_LAB, NOP_2;
-
-// clear speacial bit
-CORRECT_SEQUENCE:
-
-EZstatPutDataSendCmdIndexReg $GC_INB_ERROR_REG, uqTmpReg6, STS_BW_WR_CMD; // If Seq. number is not correct - increment error counter and quit
-
-Nop;
-Nop;
-
-varundef GC_INB_REPRT_REG;
-varundef GC_INB_ERROR_REG;
-
-Add COM_HBS, COM_HBS, 1, 1;
-
-EXT_LOOP:
-Mov ALU , 0x11 , 4;
-Nop;
-PutKey 0(COM_KBS)+, ALU, 4;                    // Valid + Match bits
-
-sub ALU, uqTmpReg1, uqTmpReg3, 4;
-Mov CNT, uqTmpReg3, 1;
-JNS CONT_LOOP, NOP_2;
-
-Mov CNT, uqTmpReg1, 1;
-Nop;
-
-CONT_LOOP:
-MovBits SIZE_REG.bit[2], CNT, 8;
-PutKey MSG_CONTROL_NUM_OF_COMMANDS(HW_KBS), CNT, 1;
-Sub uqTmpReg1, uqTmpReg1, CNT, 4;
-
-Copy 0(COM_KBS), 0(FMEM_BASE)+, SIZE_REG, NO_SWAP;    // Do we need to swap?
-
-PutHdr HREG[ COM_HBS ], CTRL_MSG_HDR;          // Set control default header
-
-Sub ALU, uqTmpReg1, 0, 4;
-Mov COM_KBS, MSG_SIZE, 2;                      // init offset to the start first message
-JZ STOP_LO0P, NOP_2;                           // for the last portion halt will regular
-
-// create HW message parameters
-Mov byFrameActionReg, FRAME_CONF_EXTRACT, 1;
-BuildMsg;
-
-PutHdr HREG[ 0 ], PRS_MSG_HDR;   // Write the message header 
-   Nop;
-Halt CONTINUE,
-   HW_MSG_HDR;
-   Nop;
-Jmp EXT_LOOP, NOP_2;
-
-STOP_LO0P:
-
-// Release RFD immediately
-EZrfdRecycleOptimized;
-
-#undef MSG_COMMANDS_MAX;
-
-ENDMACRO; //ParseControlMessage
-
-MACRO semtakeTP;
-
-wait_sem11:
-
-   EZwaitFlag F_ST;
-   nop;
-   Mov        ALU ,   0x00001 , 4;
-   nop;
-   mov        sStat_uqData, ALU, 4;
-   mov        sStat_uqDataMsb, 0x00, 4;
-   mov        ALU , CNT_SEMAPHORE_BASE , 4;
-   nop;
-   mov        sStat_3byAddress, ALU, 3;
-   mov        sStat_byCommand, STS_BW_SET_READ_CMD, 1;
-   nop;
-   Nop;
-   EZwaitFlag F_SR;
-
-   if( FLAGS.bit[F_SO]  ) jmp wait_sem11 , NOP_2;
-
-ENDMACRO; //semtakeTP
-       
-MACRO semgiveTP;
-
-   EZwaitFlag F_ST;
-   nop;
-   Mov        ALU ,   0x00001 , 4;
-   nop;
-   mov        sStat_uqData, ALU, 4;
-   mov        sStat_uqDataMsb, 0x00, 4;
-   mov        ALU , CNT_SEMAPHORE_BASE , 4;
-   nop;
-   mov        sStat_3byAddress, ALU, 3;
-   mov        sStat_byCommand, STS_BW_CLR_CMD, 1;
-   //nop;
-   //EZwaitFlag F_ST;
-
-ENDMACRO; //semgiveTP
 
 
 // ##TODO_OPTIMIZE: unify the IPv4/IPv6 buildKey macros to one, make it a function call (using PC_STACK if possible), and call it from another place instead of the loacation it is called from now.
@@ -865,29 +682,5 @@ ENDMACRO; // BuildTcamRoutingTableIndexKeyFromIPv6DIP
 
 
 
-/*==============================================================================
-macro PRSWaitForEndOfLookAside
-==============================================================================*/
-// Wait in TOPparse for the LookAside that was invoked to end.
-/// This is necessary in 1 cases:
-// 1. Before using the LA result.
-// 2. Before halting the TOPparse program - in case that microcode invoked LA - need to wait for it to finish.
-MACRO PRSWaitForEndOfIpv4DipLookAside;
-   /* Wait for CTX line of the LA */
-   EZwaitFlag F_CTX_LA_RDY_0; // Wait for flag that marks that the LookAside was ended.
-   EZwaitFlag F_CTX_IF_1;     // Wait until the context interface is ready for GetCtx command to be executed.
-
-L_PRS_READ_CTX_LINE:
-
-   GetCtx uqPRS_IPv4DIP_LookAsideResult    , CTX_LINE_EZCH_SYSTEMS_IPV4DIP_LA;
-      Nop;
-      Nop;
-      Nop; // Another nop for extra caution - may be not necesarry but should not affect timing as reading the context will
-           // consume about 15 clock cycles anyway so busy wait would be performed anyway.
-   EZwaitFlag F_CTX_IF_1; // Wait until context holds the value that was read using the GetCtx command.
-   If (!FLAGS.bit[F_CTX_VALID_1]) // Test if the context already holds the result of the LA that was performed.
-      Jmp L_PRS_READ_CTX_LINE, NOP_2; // in case that it is not valid - the search result write to the CTXT
-                                      // was not finished yet - repeat reading the context line.
-ENDMACRO;
 
 

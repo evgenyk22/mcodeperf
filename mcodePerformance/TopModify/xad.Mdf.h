@@ -173,13 +173,14 @@ LDREG MREG[15],            0x40;   //default
 #define HOST_METADATA_VAL_OFF    ETH_VID2_OFF;
 
 /* FFT_VID_STR Result Format */
-#define MDF_VLAN_TX_OFF             2;  // 2 byte Self port TX VLAN; Used for SYN challenge packets
-#define MDF_VLAN_TP_AND_BYPASS_OFF  4;  // 2 byte Packet trace vlan
-#define MDF_VIF_TX_VLAN_OFF         6;  // 2 byte FFT/SFT TX VLAN
-#define MDF_VLAN_TP_ONLY_OFF        MDF_VLAN_TP_AND_BYPASS_OFF;  // 2 byte VLAN for TP only
-#define MDF_VIF_INF_OFF             8;  // 1 byte VIF id; Outgoing VIF. ##AMIT_GUY: in routing mode this will not work, as the OUT_VID table may not hold correct values in it. this means that the per-vif counter will not gold correct value.
+#define VID_BASE_MSG                64
+#define MDF_VLAN_TX_OFF             ( VID_BASE_MSG + TX_COPY_IN_VID + 2 );  // 2 byte Self port TX VLAN; Used for SYN challenge packets
+#define MDF_VLAN_TP_AND_BYPASS_OFF  ( VID_BASE_MSG + TX_COPY_IN_VID + 4 );  // 2 byte Packet trace vlan
+#define MDF_VIF_TX_VLAN_OFF         ( VID_BASE_MSG + TX_COPY_IN_VID + 6 );  // 2 byte FFT/SFT TX VLAN
+#define MDF_VLAN_TP_ONLY_OFF        ( VID_BASE_MSG + TX_COPY_IN_VID + MDF_VLAN_TP_AND_BYPASS_OFF );  // 2 byte VLAN for TP only
+#define MDF_VIF_INF_OFF             ( VID_BASE_MSG + TX_COPY_IN_VID + 8 );  // 1 byte VIF id; Outgoing VIF. ##AMIT_GUY: in routing mode this will not work, as the OUT_VID table may not hold correct values in it. this means that the per-vif counter will not gold correct value.
+#define MDF_FFT_TX_COPY_INFO_OFF    ( VID_BASE_MSG + TX_COPY_IN_VID + 1 ); // 4 bytes TX copy information
 
-#define MDF_FFT_TX_COPY_INFO_OFF    11; // 4 bytes TX copy information
 #define MDF_SMAC_LOW_OFF    9; // 32 byte Source MAC; Is needed to avoid base MAC configuration for TOPmodify
 #define MDF_SMAC_HIGH_OFF  13; // 6 byte Source MAC high part; Is needed to avoid base MAC configuration for TOPmodify
 #define MDF_DMAC_LOW_OFF   15; // 6 byte Destination MAC

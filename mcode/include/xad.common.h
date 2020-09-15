@@ -204,7 +204,7 @@
 #define MSG_SWITCH_VLAN_FROM_HOST            48
 
 //for top resolve only
-#define MSG_NP5_INTERFACE_PORT_NUM_OFF       50 // size 2 for NP5 fistly mac link should be selected this selection based on input port and choosed action
+#define MSG_NP5_INTERFACE_PORT_NUM_OFF       13 // HWD_REG1 from hw_msg
 #define MSG_NP5_PPORT_NUM_OFF                62 // size 1 for NP5 fistly mac link should be selected this selection based on input port and choosed action
 #define MSG_CORE_NUM_OFF                     63 // size 1, core distribution calculated by topresolve
 
@@ -1886,8 +1886,6 @@
 #define UNF_FRAG_L4_MASK                 55  // size 1 , unf bdos controller
 #define UNF_POLICY_BDOS_CNG              56 //2 byte , controller + protocol encoding 
 #define UNF_TASK_CNTR                    58 // size 1
-#define UNF_L4_PROT                      59 // size 1
-
 
 
 //#define CMP_POLICY_BDOS_CFG_PHASE_OFF 42
@@ -1951,6 +1949,13 @@ IP_TOS_OFF                  1             ;
 #define  CMP_BDOS_L4_CNTRL_OFF         ( 11 + UNF_BDOS_L4_KEY_OFFSET )  // Size 4 bytes metadata will be replaced in TS
 
 //15 bytes
+
+#define  UNF_L4_PROT   ( 15 + UNF_BDOS_L4_KEY_OFFSET ) //1 byte
+//2 byte for protocols
+
+#define UNF_VIF_OFF   ( 16 + UNF_BDOS_L4_KEY_OFFSET ) // size 1
+
+
 
 #define CMP_BDOS_L23_IPV4_KMEM_SIZE      48  // 47 bytes padded to the closest multiple of 16 bytes
 
@@ -2172,6 +2177,9 @@ IP_TOS_OFF                  1             ;
 
 #define  L4RTPC_KEY_SIZE     2
 
+
+#define TX_COPY_IN_VID 10
+#define TX_COPY_SYN_IN_VID 24
 
 
 #endif // _XAD_COMMON_H_

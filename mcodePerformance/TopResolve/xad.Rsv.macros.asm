@@ -16,7 +16,7 @@ MACRO PrepareRsvMsg;
 
    // Calculate the host port used to send the frame
 
-   xor uqTmpReg6 , uqTmpReg6,uqTmpReg6,4;
+   //xor uqTmpReg6 , uqTmpReg6,uqTmpReg6,4;
 
    if (!byGlobalStatusBitsReg.bit[ALIST_SAMPL_BIT]) jmp SKIP_ALIST_SAMPL_MARK_LAB, NO_NOP;
       GetRes ALU.byte[0], ALST_RES_ENTRY_ID_OFF(ALST_RES_STR), 2;
@@ -30,20 +30,23 @@ MACRO PrepareRsvMsg;
 
 SKIP_ALIST_SAMPL_MARK_LAB:
 
-   xor uqTmpReg7, ALU, !ALU, 4, TRAFFIC_ENGINE_NUMBER, MASK_BOTH; // using MREG[12] 
-   GetRes  uqTmpReg6, MSG_HASH_CORE_OFF(MSG_STR), 1; // Note: frames that are not IP (i.e. L2 control frames e.g. ARP, etc) will probably always have 0 hash function result. this does not give distribution.
+   //xor uqTmpReg7, ALU, !ALU, 4, TRAFFIC_ENGINE_NUMBER, MASK_BOTH; // using MREG[12] 
+   //GetRes  uqTmpReg6, MSG_HASH_CORE_OFF(MSG_STR), 1; // Note: frames that are not IP (i.e. L2 control frames e.g. ARP, etc) will probably always have 0 hash function result. this does not give distribution.
+   // 8 bit hash mapped there
+   //Mov  uqTmpReg6, UREG[6].byte[3] , 1; 
+   Putkey MSG_HASH_CORE_OFF(HW_OBS), UREG[6].byte[3] ,  1;
    PutKey  MSG_ACTION_ENC_OFF(HW_OBS), byFrameActionReg, 1;      
    //Modulo  ALU, bytmp0, uqTmpReg6.byte[0] , 1;
-   LongDiv uqTmpReg6 , uqTmpReg6 , uqTmpReg7 , 2;     
-   MovBits ENC_PRI.bit[13], byFrameActionReg.bit[0], 3;
+   //LongDiv uqTmpReg6 , uqTmpReg6 , uqTmpReg7 , 2;     
+   //MovBits ENC_PRI.bit[13], byFrameActionReg.bit[0], 3;
    //traffic engine number should start from 1
 
 
 /************************************** New for NP5 *************************************/
 /************** MAC selection based  on input port number *************************/
 
-   MovBits ENC_PRI.bit[9] , byFrameActionReg.bit[0] , 7; 
-   GetRes uqTmpReg1.byte[3] , MSG_NP5_INTERFACE_PORT_NUM_OFF(MSG_STR) , 1;
+   //MovBits ENC_PRI.bit[9] , byFrameActionReg.bit[0] , 7; 
+   //GetRes uqTmpReg1.byte[3] , MSG_NP5_INTERFACE_PORT_NUM_OFF(MSG_STR) , 1;
 
 /*
 #define FRAME_BYPASS_NETWORK           (1 << FRAME_BYPASS_NETWORK_BIT)
@@ -55,15 +58,15 @@ SKIP_ALIST_SAMPL_MARK_LAB:
 #define FRAME_HOST_BYPASS_2NETW        (1 << FRAME_HOST_BYPASS_2NETW_BIT)
 #define FRAME_TP_BYPASS_2NETW          (1 << FRAME_HOST_BYPASS_2NETW_TP_BIT)
 */
-   MovMul  1 , 0 , 0 , 0 ,255 ,255 ,0; /*-1 , -1 , 1;*/
+   //MovMul  1 , 0 , 0 , 0 ,255 ,255 ,0; /*-1 , -1 , 1;*/
    //wait longdiv to compleate
    //EZwaitFlag F_ITR;
-   Xor uqTmpReg1.byte[0] ,uqTmpReg1.byte[0]  , uqTmpReg1.byte[0] , 2;
-   Add ALU.byte[0] ,uqTmpReg1.byte[3] , ENC_PRO , 1 ;
+   //Xor uqTmpReg1.byte[0] ,uqTmpReg1.byte[0]  , uqTmpReg1.byte[0] , 2;
+   //Add ALU.byte[0] ,uqTmpReg1.byte[3] , ENC_PRO , 1 ;
    copy    56(HW_OBS),  56(MSG_STR), 8;
-   MovBits uqTmpReg1.byte[0].bit[6] , ALU.byte[0].bit[0] , 8;      
-   PutKey  MSG_NP5_PPORT_NUM_OFF(HW_OBS),ALU.byte[0] , 1;
-   PutKey  MSG_NP5_INTERFACE_PORT_NUM_OFF(HW_OBS), uqTmpReg1.byte[0], 2;  
+   //MovBits uqTmpReg1.byte[0].bit[6] , ALU.byte[0].bit[0] , 8;      
+   //PutKey  MSG_NP5_PPORT_NUM_OFF(HW_OBS),ALU.byte[0] , 1;
+   //PutKey  MSG_NP5_INTERFACE_PORT_NUM_OFF(HW_OBS), uqTmpReg1.byte[0], 2;  
 
 UPDATE_MSG_CTRL_TOPRSV_0_1_LAB:
 
@@ -71,8 +74,8 @@ vardef regtype uqRSV_INDIRECT_CTX_LOAD    INDIRECT_CTX_LOAD.byte[0:1];  // INDIR
 
    //PutKey MSG_CTRL_TOPPRS_3_OFF(HW_OBS), uqTmpReg9.byte[0], 1;   // Writing 2 ctrl bytes (byCtrlMsgRsv0 and byCtrlMsgRsv1) in 1 operation 
    //Wait for the end of LongDiv Instruction -- bit 22   F_CTX_LA_RDY_1 the same as F_ITR
-   EZwaitFlag F_CTX_LA_RDY_1;
-   PutKey  MSG_CORE_NUM_OFF(HW_OBS),  uqTmpReg6, 1;
+   //EZwaitFlag F_CTX_LA_RDY_1;
+   //PutKey  MSG_CORE_NUM_OFF(HW_OBS),  uqTmpReg6, 1;
 
 //add route table search in case of send packet to CPU
 // I need it for correct packet marking
@@ -101,23 +104,23 @@ vardef regtype uqRSV_INDIRECT_CTX_LOAD    INDIRECT_CTX_LOAD.byte[0:1];  // INDIR
 
 SKIP_MYIP_DETECTION:
 
-    If (!byTempCondByte1.bit[0]) Jmp SKIP_CORE_DISTRIBUTION, NOP_2;
+    //Jmp SKIP_CORE_DISTRIBUTION, NOP_2;
    
-    PutHdr HREG[ COM_HBS ], ((LKP_VALID  | ( CORE_DISTR_LAB << HREG_FIRST_LINE_ADDR_BIT) | (((RSV_FFT_TX_COPY_PORT_LKP_KEY_SIZE - 1) >> 4) << HREG_KEY_SIZE_BIT) | (KEY_TYPE_1 << HREG_KEY_TYPE_BIT))) ;
-    MovBits byTemp3Byte0.bit[CTX_LINE_CORE2IP_DISTRIBUTION], 1, 1;
-    Add COM_HBS  , COM_HBS ,  1 , 1;
+    //PutHdr HREG[ COM_HBS ], ((LKP_VALID  | ( CORE_DISTR_LAB << HREG_FIRST_LINE_ADDR_BIT) | (((RSV_FFT_TX_COPY_PORT_LKP_KEY_SIZE - 1) >> 4) << HREG_KEY_SIZE_BIT) | (KEY_TYPE_1 << HREG_KEY_TYPE_BIT))) ;
+    //MovBits byTemp3Byte0.bit[CTX_LINE_CORE2IP_DISTRIBUTION], 1, 1;
+    //Add COM_HBS  , COM_HBS ,  1 , 1;
 
-    xor ALU, ALU, !ALU, 4, TRAFFIC_ENGINE_NUMBER, MASK_BOTH; // using MREG[12] 
-    GetRes uqTmpReg6.byte[0] , MSG_HASH_CORE_OFF(MSG_STR), 1;
+    //xor ALU, ALU, !ALU, 4, TRAFFIC_ENGINE_NUMBER, MASK_BOTH; // using MREG[12] 
+    //GetRes uqTmpReg6.byte[0] , MSG_HASH_CORE_OFF(MSG_STR), 1;
     //Copy { KMEM_RSV2SRH2_FFT_KEY_OFF+RSV_FFT_TX_COPY_PORT_LKP_KEY_SIZE_KMEM_ALIGN + 2} ( HW_OBS ),  MSG_HASH_CORE_OFF(MSG_STR), 1;
-    Mov uqTmpReg6.byte[2] , ALU , 1; 
-    Nop;
-    PutKey KMEM_OFFSET( HW_OBS ),  uqTmpReg6 , 4;
-    Add KMEM_OFFSET , KMEM_OFFSET , RSV_FFT_TX_COPY_PORT_LKP_KEY_SIZE_KMEM_ALIGN , 1;
+    //Mov uqTmpReg6.byte[2] , ALU , 1; 
+    //Nop;
+    //PutKey KMEM_OFFSET( HW_OBS ),  uqTmpReg6 , 4;
+    //Add KMEM_OFFSET , KMEM_OFFSET , RSV_FFT_TX_COPY_PORT_LKP_KEY_SIZE_KMEM_ALIGN , 1;
 
 SKIP_CORE_DISTRIBUTION:
 
-   GetRes ALU , MSG_CTRL_TOPRSV_2_OFF(MSG_STR) , 1;
+   Mov ALU , /*MSG_CTRL_TOPRSV_2_OFF(MSG_STR)*/byCtrlMsgRsv2 , 1;
 
    movbits $uqRSV_INDIRECT_CTX_LOAD , byTemp3Byte0 , 4;   
 
@@ -125,8 +128,9 @@ SKIP_CORE_DISTRIBUTION:
    MovBits byCtrlMsgPrs2Rsv2.bit[2] , ALU.bit[2] , 2;   
    //change beheviour of this bit to indicate RTPC/Marking status
    MovBits byCtrlMsgRsv0.bit[MSG_CTRL_TOPPRS_0_ANALYZE_POLICY_BIT], RTPC_IS_ENABLED_BIT, 1;
-   nop;
-   nop;
+    
+   PutKey MSG_CTRL_TOPRSV_0_OFF(HW_OBS) , UREG[2] , 3;
+   PutKey   MSG_CTRL_TOPPRS_3_OFF(HW_KBS), UREG[2].byte[3],   1;
    PutKey MSG_CTRL_TOPRSV_0_OFF(HW_OBS), byCtrlMsgRsv0, 2;  // Writing 2 ctrl bytes (byCtrlMsgRsv0 and byCtrlMsgRsv1) in 1 operation  
    PutKey MSG_CTRL_TOPRSV_2_OFF(HW_OBS), byCtrlMsgPrs2Rsv2, 1;// Writing last ctrl byte
    
@@ -546,8 +550,10 @@ If ( !byCtrlMsgPrs0.bit[MSG_CTRL_TOPPRS_0_ALST_EMPTY_BIT] ) Mov ALU , BDOS_SAMP_
 EZstatPutDataSendCmdIndexReg /* uqTmpReg5 */ CTX_REG[3], ALU, STS_GET_COLOR_CMD;
 
 //signuture global id
-MovBits  uqTmpReg2.bit[3] , BDOS_SIGNA_CONF , 14 , RESET; 
-//MovBits ALU , BDOS_SIGNA_CONF , 14 , RESET;
+//MovBits  uqTmpReg2.bit[3] , BDOS_SIGNA_CONF , 14 , RESET; 
+MovBits ALU.bit[3] , BDOS_SIGNA_CONF , 14 , RESET;
+nop;
+Mov uqTmpReg2 , ALU , 4;
 //current counter base = ( polid *4*32) 
 //SHL uqTmpReg4 , ALU  , 7 , 4 ;
 // First - prepare signature action  
@@ -665,14 +671,7 @@ DROP_HANDLER:
 
 DROP_HANDLER_CONT:
 
-   if (!byTempCondByte.bit[5]) jmp BDOS_DISCARD_LAB; //not trace, drop
-       Nop;
-       Nop;
-       
-
-   jmp FRAME_TP_BYPASS_2NETW_LAB;
-      MovBits byTempCondByte.bit[0], 0x1, 2;//Drop with trace
-      Nop;
+   jmp BDOS_DISCARD_LAB , NOP_2; //not trace, drop
       
 
 CONT_HANDLER:
@@ -714,27 +713,10 @@ mov uxEthTypeMetaData, ALU, 2;
 
 BYPASS_HANDLER_CONT:
 
-if (!bitRSV_isRoutingMode) jmp FFT_TABLE_TXCOPY_END3_LAB;
-    PutHdr HREG[ COM_HBS ], RSV_FFT_ALST_LKP_HDR;
-    Copy KMEM_OFFSET ( HW_OBS ),  MSG_VIF_OFF(MSG_STR), 1;
-
-GetRes uqTmpReg6 , 0(INT_TCAM_STR), 3 ;
-PutHdr HREG[ COM_HBS ], RSV_ROUTE_ALST_LKP_HDR;
-and ALU, uqTmpReg6.byte[1], uqTmpReg6.byte[1] , 2, MASK_000007FF, MASK_BOTH;    
-Nop;
-PutKey KMEM_OFFSET ( HW_OBS ),  ALU, 2;
-
-If (!RTPC_IS_ENABLED_BIT) Add COM_HBS  , COM_HBS ,  1 , 1;
-If (!RTPC_IS_ENABLED_BIT) MovBits byTemp3Byte0.bit[CTX_LINE_OUT_IF]  , 1 , 1;
-If (!RTPC_IS_ENABLED_BIT) Add KMEM_OFFSET , KMEM_OFFSET , RSV_FFT_RX_COPY_PORT_LKP_KEY_SIZE_KMEM_ALIGN , 1;
 
 jmp YYYYYYY,NOP_2;
 
 FFT_TABLE_TXCOPY_END3_LAB:
-Add COM_HBS  , COM_HBS ,  1 , 1;
-
-MovBits byTemp3Byte0.bit[CTX_LINE_OUT_IF]  , 1 , 1;
-Add KMEM_OFFSET , KMEM_OFFSET , RSV_FFT_RX_COPY_PORT_LKP_KEY_SIZE_KMEM_ALIGN , 1;
 
 YYYYYYY:
 
@@ -742,7 +724,7 @@ YYYYYYY:
    if (!byTempCondByte.bit[5]) jmp rtmCountersPerPolicyUpdate_LAB, NO_NOP;//not trace, skip forensic action
        Mov PC_STACK, FRAME_BYPASS_NETWORK_LAB, 2;
        MovBits byGlobalStatusBitsReg.bit[RTM_RECIVE_DROP_IND_BIT], 1, 1;
-   jmp FRAME_TP_BYPASS_2NETW_LAB, NOP_1;
+   jmp BYPASS_HANDLER, NOP_1;
       MovBits byTempCondByte.bit[0], 0x3, 2;//Packet Bypass with trace
 
 BDOS_DISCARD_LAB:

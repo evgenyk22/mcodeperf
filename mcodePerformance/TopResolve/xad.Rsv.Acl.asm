@@ -98,22 +98,6 @@ If (RTPC_IS_ENABLED_BIT)
    mov uxEthTypeMetaData, RTPC_WHITE_BYPASS, 2;  
 
 
-if (!bitRSV_isRoutingMode) jmp FFT_TABLE_TXCOPY_END_LAB;
-    PutHdr HREG[ COM_HBS ], RSV_FFT_ALST_LKP_HDR;
-    Copy KMEM_OFFSET ( HW_OBS ),  MSG_VIF_OFF(MSG_STR), 1;
-
-GetRes uqTmpReg6 , 0(INT_TCAM_STR), 3 ;
-PutHdr HREG[ COM_HBS ], RSV_ROUTE_ALST_LKP_HDR;
-and ALU, uqTmpReg6.byte[1], uqTmpReg6.byte[1] , 2, MASK_000007FF, MASK_BOTH;    
-Nop;
-PutKey KMEM_OFFSET ( HW_OBS ),  ALU, 2;
-
-FFT_TABLE_TXCOPY_END_LAB:
-Add COM_HBS  , COM_HBS ,  1 , 1;
-
-jmp BYPASS_NETW_LAB; // Continue to bypass action
-    MovBits byTemp3Byte0.bit[CTX_LINE_OUT_IF]  , 1 , 1;
-    Add KMEM_OFFSET , KMEM_OFFSET , RSV_FFT_RX_COPY_PORT_LKP_KEY_SIZE_KMEM_ALIGN , 1;
     
 
 
