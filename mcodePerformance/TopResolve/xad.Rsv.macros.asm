@@ -222,7 +222,18 @@ MACRO AnalyzeBdosResult SigNum, foreignNegativeSignaturesBitmask;
 #define BDOS_RESULT_REG       uqTmpReg4;
 #define BDOS_SIGNA_WORD_SEL   uqTmpReg9;
 #define BDOS_SIGNA_CONF       uqTmpReg10;
-
+/*
+nop;
+nop;
+nop;
+nop;
+nop;
+nop;
+nop;
+nop;
+nop;
+nop;
+*/
 Decode ALU,SigNum,4;
 //If ( byTempCondByte3.bit[0] ) jmp BDOS_RESULT_CALCULATED;
     MovBits  byTempCondByte3.bit[0] , 1 , 1;//moti: to check - seemd not needed
@@ -279,41 +290,6 @@ getRes  uqTmpReg2, PACKET_SIZE_RES_OFF (BDOS_ATTACK_RESULTS_L4_STR), 4;
 MovBits BDOS_RESULT_REG.bit[TCP_CHKSUM_SEL_OFF ], UREG[IND_REG0], 1;
 MovBits BDOS_RESULT_REG.bit[PACKET_SIZE_SEL_OFF], UREG[IND_REG1], 1;
 
-#ifdef DNS_ENABLE
-
-getRes  uqTmpReg1, L7_DNS_REC_TYPE_RES_OFF  (BDOS_ATTACK_RESULTS_L4_2_STR), 4;
-getRes  uqTmpReg2, L7_DNS_RESP_CODE_RES_OFF (BDOS_ATTACK_RESULTS_L4_2_STR), 4;
-MovBits BDOS_RESULT_REG.bit[L7_DNS_REC_TYPE_SEL_OFF ], UREG[IND_REG0], 1;
-//Mov2Bits BDOS_RESULT_REG.bits[L7_DNS_REC_TYPE_SEL_OFF,L7_DNS_OTHER_REC_TYPE_SEL_OFF],BDOS_RESULT_REG.bits[L7_DNS_REC_TYPE_SEL_OFF, ~L7_DNS_REC_TYPE_SEL_OFF];
-MovBits BDOS_RESULT_REG.bit[L7_DNS_RESP_CODE_SEL_OFF], UREG[IND_REG1], 1;
-Mov2Bits BDOS_RESULT_REG.bits[L7_DNS_REC_TYPE_SEL_OFF,L7_DNS_OTHER_REC_TYPE_SEL_OFF],BDOS_RESULT_REG.bits[L7_DNS_REC_TYPE_SEL_OFF, ~L7_DNS_REC_TYPE_SEL_OFF];
-
-getRes  uqTmpReg1, L7_DNS_TRANSACTION_ID_RES_OFF  (BDOS_ATTACK_RESULTS_L4_2_STR), 4;
-getRes  uqTmpReg2, L7_DNS_QUERIES_COUNT_RES_OFF (BDOS_ATTACK_RESULTS_L4_2_STR), 4;
-MovBits BDOS_RESULT_REG.bit[L7_DNS_TRANSACTION_ID_SEL_OFF ], UREG[IND_REG0], 1;
-MovBits BDOS_RESULT_REG.bit[L7_DNS_QUERIES_COUNT_SEL_OFF], UREG[IND_REG1], 1;
-
-getRes  uqTmpReg1, L7_DNS_ANSWERS_COUNT_RES_OFF  (BDOS_ATTACK_RESULTS_L4_2_STR), 4;
-getRes  uqTmpReg2, L7_DNS_FLAGS_RES_OFF (BDOS_ATTACK_RESULTS_L4_2_STR), 4;
-MovBits BDOS_RESULT_REG.bit[L7_DNS_ANSWERS_COUNT_SEL_OFF ], UREG[IND_REG0], 1;
-MovBits BDOS_RESULT_REG.bit[L7_DNS_FLAGS_SEL_OFF], UREG[IND_REG1], 1;
-
-getRes  uqTmpReg1, L7_DNS_MANUAL_QN_RES_OFF  (BDOS_ATTACK_RESULTS_QN_STR), 4;
-getRes  uqTmpReg2,  L7_DNS_BEHAVIOR_QN_RES_OFF(BDOS_ATTACK_RESULTS_QN_STR), 4;
-MovBits BDOS_RESULT_REG.bit[L7_DNS_MANUAL_QN_SEL_OFF ], UREG[IND_REG0], 1;
-MovBits BDOS_RESULT_REG.bit[L7_DNS_BEHAVIOR_QN_SEL_OFF ], UREG[IND_REG1], 1;
-
-//getRes  uqTmpReg1,  L7_DNS_BEHAVIOR_QN_RES_OFF(BDOS_ATTACK_RESULTS_QN_STR), 4;
-//Nop;
-
-
-getRes  uqTmpReg1,  L7_DNS_BEHAVIOR_DOMAIN_RES_OFF(BDOS_ATTACK_RESULTS_QN_STR), 4;
-getRes  uqTmpReg2,  L7_DNS_BEHAVIOR_WL_RES_OFF(BDOS_ATTACK_RESULTS_QN_STR), 4;
-MovBits BDOS_RESULT_REG.bit[L7_DNS_BEHAVIOR_DOMAIN_SEL_OFF ], UREG[IND_REG0], 1;
-
-#endif
-//never update WL to BDOS result ,  it need to be special treatment
-//MovBits BDOS_RESULT_REG.bit[L7_DNS_BEHAVIOR_WL_SEL_OFF  ], UREG[IND_REG1], 1;
 
 
 
@@ -387,12 +363,13 @@ js END_OF_MACRO , NOP_2;
 //Read groups 1,2
 EZstatSendCmdIndexReg BDOS_SIGNA_WORD_SEL, STS_READ_CMD;
 Mov ALU , {~(1<<L7_DNS_BEHAVIOR_WL_SEL_OFF)} , 4;
+/*
 Nop;
 
 if (!FLAGS.bit[F_SR]) jmp $;
     Nop;    
     Nop;
-
+ */
     And  STAT_RESULT_L , STAT_RESULT_L , ALU , 4;
     Nop;
 //check group 1
@@ -536,7 +513,7 @@ MovBits byCtrlMsgPrs0.bit[MSG_CTRL_TOPPRS_0_ALST_EMPTY_BIT] , BDOS_SIGNA_CONF.bi
 //signuture global id
 Add /*uqTmpReg5*/ CTX_REG[3] , ALU , BDOS_SIGNA_CONF , 4 , MASK_00003FFF, MASK_SRC2 ; 
 
-GetRes  ALU  ,  MSG_CONTROL_HW_MSG_FR_LEN_OFF(MSG_STR) , 2 , RESET;
+GetRes  ALU  ,  MSG_CONTROL_HW_MSG_FR_LEN_OFF(MSG_STR) , 2 , RESET , STAT_OPT;
 //without sw vlan
 If (!byGlobalStatusBitsReg.bit[SRC_100G_BIT]) Sub ALU , ALU , 4 , 2 ;
 If ( !byCtrlMsgPrs0.bit[MSG_CTRL_TOPPRS_0_ALST_EMPTY_BIT] ) Mov ALU , BDOS_SAMP_SIZE_CONST , 2;
@@ -547,9 +524,16 @@ If ( !byCtrlMsgPrs0.bit[MSG_CTRL_TOPPRS_0_ALST_EMPTY_BIT] ) Mov ALU , BDOS_SAMP_
 // 1. Using TM - send all sampled frames to dedicated queue in TM
 //    and configure TB on this queue according to feature.
 // 2. Using Statistics TB.
-EZstatPutDataSendCmdIndexReg /* uqTmpReg5 */ CTX_REG[3], ALU, STS_GET_COLOR_CMD;
 
+//nop;
 //signuture global id
+mov        SREG_LOW [10], ALU, 4  ;
+mov        SREG_LOW [11], 0x00, 4  ;
+mov SREG_LOW [9], CTX_REG[3], 4  ;
+movbits    SREG_LOW [1].BYTE [2], ((0x24 << offset_bit(EZstat_StsCmd.bitsOpcode)) | ( 0 << offset_bit(EZstat_StsCmd.bitCtxEnable)) | ( 0 << offset_bit(EZstat_StsCmd.bitsCtxOffset))),     offset_bit(EZstat_StsCmd.bitsReserved_11)  ;
+
+//EZstatPutDataSendCmdIndexReg  CTX_REG[3], ALU, STS_GET_COLOR_CMD;
+
 //MovBits  uqTmpReg2.bit[3] , BDOS_SIGNA_CONF , 14 , RESET; 
 MovBits ALU.bit[3] , BDOS_SIGNA_CONF , 14 , RESET;
 nop;
@@ -584,23 +568,27 @@ Nop;
 
 //ENC_PRI gets BDOS_SIGNA_CONFIG_TB_GREEN_IS_RED,BDOS_SIGNA_CONFIG_TB_GREEN_IS_YELLOW,1 (default is green)
 Mov3Bits ENC_PRI.bits[13,12,11],byTempCondByte.bits[4,3,TRUE];
+//nop;
+//nop;
+//nop;
 
 //get TB color
 //EZwaitFlag F_SR;
 
-   if       ( !FLAGS.BIT [ F_SR ] )
-      jmp   $ ;
+   //if       ( !FLAGS.BIT [ F_SR ] )
+   //   jmp   $ ;
       
           GetRes uqTmpReg6, { POLICY_UID_OFF }(POLICY_RES_CONF_STR), 2;  // Save policy id in message to be used for Host metadata addition in TOPmodify
           //MovBits uqTmpReg6.bit[10], BDOS_SIGNA_CONF.bit[BDOS_SIGNA_UID] , 4;
           //set defaul value 
-          MovBits uqTmpReg6.bit[9], 0xf , 4;
+          MovBits uqTmpReg6.bit[9], 0xf , 4 , STAT_OPT;
 
 MovBits ENC_PRI.bit[14],STAT_RESULT_L.bit[YELLOW_FLAG_OFF],2;
 Nop;
 // Green - continue
 // Yellow - sample
 // RED - perform action
+/* -- debug */
 
 Jmul  BDOS_TB_COLOR_RED,
       BDOS_TB_COLOR_YELLOW,
@@ -610,7 +598,11 @@ Jmul  BDOS_TB_COLOR_RED,
       BDOS_TB_COLOR_GREEN, 
       BDOS_TB_COLOR_GREEN; 
 
+//jmp BDOS_TB_COLOR_RED , NOP_2;
+
 BDOS_TB_COLOR_GREEN:
+
+
 
 //if under threshold for all signature types jump to next signature 
 jmp  END_OF_MACRO;
@@ -624,6 +616,7 @@ nop;
 #endif;
           
 BDOS_TB_COLOR_RED:
+   
    movBits ENC_PRI.bit[13], uqTmpReg4.bit[0], 3;
    MovBits ALU , BDOS_SIGNA_CONF.bit[BDOS_SIGNA_CONFIG_TYPE] , 2 , RESET;
    Jmul BYPASS_HANDLER, 

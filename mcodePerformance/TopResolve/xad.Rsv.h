@@ -45,7 +45,7 @@
 
 #define uqTmpReg1                   UREG[10] //UREG[3];
 #define uqTmpReg2                   UREG[13] //UREG[4];
-#define uqTmpReg3                   CTX_REG[3] // UREG[5];
+#define uqTmpReg3                   CTX_REG[6] // UREG[5];
 #define uqTmpReg4                   UREG[7]  //UREG[6];
 #define uqTmpReg5                   CTX_REG[4];
 
