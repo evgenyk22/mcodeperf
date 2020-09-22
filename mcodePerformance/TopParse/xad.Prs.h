@@ -340,7 +340,7 @@ LdMsgHdr PRS_MSG_HDR;  // This is used for copying HW_MSG (first 16 bytes of MSG
 #define CTRL_FRAME_FIRST_COMMAND_OFF   (8 + CTRL_FRAME_ETH_HDR_SIZE);
 
 #define HW_KBS                               KMEM_BASE0;
-#define COM_KBS                              KMEM_BASE1;
+#define COM_KBS                              KMEM_BASE3;
 #define COM_HBS                              HREG_BASE1;
 
 // offsets for Packet Payload control register

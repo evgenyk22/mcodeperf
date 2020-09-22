@@ -525,7 +525,7 @@ If ( !byCtrlMsgPrs0.bit[MSG_CTRL_TOPPRS_0_ALST_EMPTY_BIT] ) Mov ALU , BDOS_SAMP_
 //    and configure TB on this queue according to feature.
 // 2. Using Statistics TB.
 
-//nop;
+nop;
 //signuture global id
 mov        SREG_LOW [10], ALU, 4  ;
 mov        SREG_LOW [11], 0x00, 4  ;

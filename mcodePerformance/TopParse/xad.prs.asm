@@ -152,31 +152,32 @@ Mov  R_PC , CONT_LAB , 4;
 //Decode_General 0(FMEM_BASE);	 // NP4 does not make HW parsing like NP3, that's why we use this command (we can optimize by removing decoding for packets arrived from CPU)
 
 
+Mov byFrameActionReg , FRAME_CONT_ACTION  , 4;
 // Start to initialize registers
 //Mov uqTmpReg1, PORT_CFG0, 4; // ##TODO_OPTIMIZE: probably not needed - comment and pass verifications then remove if not needed anymore. if removing this line need to write the next one 1 level in to show that the modulo command is not over yet (consumes 2 clocks), so ALU is ready for the Lookcam only after 2 clocks.
 
-#define KBS_INIT_VAL (MSG_SIZE << 16);
+//#define KBS_INIT_VAL (MSG_SIZE << 16);
 // Lookcam removed. used only for routing
 //Lookcam CAMO, ALU, BCAM32[CPU_2_NET_MAP_GRP]; // Lookcam to select NP's-to-NW output port (XAUI) according to a random function (RTC value) in order to load balance.
 
 If (CAMO.bit[16]) Add FMEM_BASE , FMEM_BASE , 8 , 2;
 
    xor uqGcCtrlReg0, ALU, !ALU, 4, GC_CNTRL_0_MREG, MASK_BOTH; // using MREG[15] 
-   Mov byCtrlMsgPrs0, 0,    4;    // Clears byCtrlMsgPrs0, byCtrlMsgPrs1, byFrameActionReg, bySrcPortReg
+   //Mov byCtrlMsgPrs0, 0,    4;    // Clears byCtrlMsgPrs0, byCtrlMsgPrs1, byFrameActionReg, bySrcPortReg
    Mov byCtrlFree,    0,    4;    // Clears byGlobFree, byCtrlMsgPrs2, byGlobConfReg, byCtrlMsgPrs3
    
    decode_general 0(FMEM_BASE);	 
-   Mov byCtrlMsgPrs2, 0,    1;    // Clears byCtrlMsgPrs2
-   Mov byGlobConfReg, 0,    1;    // Clear byGlobConfReg   
-   Mov byFrameActionOverrideReg,0,1;// Clear byFrameActionOverrideReg   
+   //Mov byCtrlMsgPrs2, 0,    1;    // Clears byCtrlMsgPrs2
+   //Mov byGlobConfReg, 0,    1;    // Clear byGlobConfReg   
+   //Mov byFrameActionOverrideReg,0,1;// Clear byFrameActionOverrideReg   
    //ENC_PRI does not need the below init. JMUL ignores LSbits 
    //Mov    ENC_PRI,       0,    2;    // Clear ENC_PRI register
-   Mov byHashVal, 0, 1;
+   //Mov byHashVal, 0, 1;
 
 
 
-Mov COM_HBS,       0,    1;    // Clear COM_HBS (HREG_BASE1 register)
-Mov HW_KBS, KBS_INIT_VAL, 4; // init both KMEM_BASE0 (HW_KBS) and KMEM_BASE1 (COM_KBS) in one step.
+//Mov COM_HBS,       0,    1;    // Clear COM_HBS (HREG_BASE1 register)
+//Mov HW_KBS, KBS_INIT_VAL, 4; // init both KMEM_BASE0 (HW_KBS) and KMEM_BASE1 (COM_KBS) in one step.
 
 // Fix KMEM HW reset issue by workaround 
 //PutKey MSG_POLICY_ID_OFF(HW_KBS), DEF_POLICY_METADATA_ID, 2; // Init default policy ID value
@@ -194,7 +195,7 @@ Xor ALU , ALU , !ALU , 4  ;
 MovBits ALU, SREG_HIGH[2].bit[20], 2; // sBdgtStatus2_bitsPortDropPri = SREG_HIGH[2].bit[20]
 
 // reset condition bit in case frame arrives from network port
-Mov byTempCondByte1, 0, 1;
+//Mov byTempCondByte1, 0, 1;
    
 // Jump to the relevant packet handling according to inerface type as defined input port data
 // For a Jmul instruction with more than 3 labels, in case of match (jump), the two instructions that follow this instruction are not executed.
@@ -343,21 +344,6 @@ SWITCH_TCAM_SEARCH_LAB:
 
    // Start calculating the src port 
    Mov CAMI, 0, 4; // Nop;
-//   And ALU, HWD_REG7, {1 << sHWD_bitOneTag_off}, 1;
-//   MovBits CAMI.BYTE[2] , sHWD_uxTag1Vid, 12; // Put Switch VLAN in CAMI.byte[2..3]
-
-//Save the Switch vlan and the first User vlans.
-/* Untagged case (i.e. only 1 VTAG in frame - the switch VLAN): in this case set the user VLAN to 0xFFFF and only keep the Switch VLAN */
-//if (!FLAGS.BIT[F_ZR]) Mov     CAMI, 0xFFFF, 2;
-/* Tagged case {more then 1 VLAN in frame - i.e. User VLAN exist (assuming that no VLAN Tags in frame at all is not an option)}. */
-//if ( FLAGS.BIT[F_ZR]) MovBits CAMI, sHWD_uxTag2Vid, 12;
-//##TODO_OPTIMIZE: There is no use of the inner VLAN, only using the outer, switch VLAN so why bother setting it in the TCAM? (the entries written to the TCAM64 are probably masked by the host, as they are configured now) - consider removing this code block. if removing it check that the current number of VLAN legality test is not harmed).
-
-//#define VIF_GROUP_32    0;
-// Result of CAM lookup is logical port (vif, low 5 bits, for optional 32 logical ports) used to locate the TX vlan when we want to send the frame back to the network. Bit 7 (5,6 not used) is used to indicate whether the port is in transparent mode (0) or FFT mode (1)
-//LookCam CAMO, CAMI, TCAM64[ VIF_GROUP_32 ], KEY_SIZE 4;
-
-
    Mov ALU  , RX_VLAN_0 , 2;
    Sub CAMI , sHWD_uxTag1Vid , ALU , 2;
    LookCam CAMO, CAMI, BCAM8[ FFT_BCAM8_GRP ];
@@ -365,10 +351,10 @@ SWITCH_TCAM_SEARCH_LAB:
 
 
 Mov FMEM_BASE, uqOffsetReg0.byte[L3_OFFB], 2;
-Mov byFrameActionReg, FRAME_BYPASS_HOST, 1;
-Nop; //movbits IP_VERSION_BIT, sHWD_bitL3IsIpV6  , 1;  //Assume IPv4 , if no will be overrided by IPv6 flag  
+//Mov byFrameActionReg, FRAME_BYPASS_HOST, 1;
+//Nop; //movbits IP_VERSION_BIT, sHWD_bitL3IsIpV6  , 1;  //Assume IPv4 , if no will be overrided by IPv6 flag  
 
-Copy   MSG_SIP_OFF(HW_KBS ), IP_SIP_OFF (FMEM_BASE),4, SWAP;
+//Copy   MSG_SIP_OFF(HW_KBS ), IP_SIP_OFF (FMEM_BASE),4, SWAP;
 // The LookCam in TCAM64 took 4 clocks, so result is now ready.
 //at this point TCAM search had been already completed - check if TCAM match.
 if (!FLAGS.BIT[F_MH]) jmp TCAM_SEARCH_FAIL_LAB, NO_NOP;
@@ -405,8 +391,8 @@ Putkey UNF_PROT_POLICY_PHASE_OFF(COM_KBS), uqGcCtrlReg0.byte[2], CMP_POLICY_PHAS
 PutKey UNF_PROT_VLAN_OFF (COM_KBS), $usrVlanTag , 2;
 
 
-If (CAMO.bit [SSL_PORT_DET]) Mov uqGcCtrlReg0 , ALU  , 4;
-If (CAMO.bit [SSL_PORT_DET]) Mov byFrameActionOverrideReg , FRAME_BYPASS_HOST  , 1;
+//If (CAMO.bit [SSL_PORT_DET]) Mov uqGcCtrlReg0 , ALU  , 4;
+//If (CAMO.bit [SSL_PORT_DET]) Mov byFrameActionOverrideReg , FRAME_BYPASS_HOST  , 1;
 
 
 Mov ALU,0,4; 
@@ -480,7 +466,7 @@ SKIP_RT_CALC:
 // RT monitoring drop counters update
 
 GLOB_CONF_DROP_LAB_CONT:
-   MovBits  byTempCondByte1.BIT[0], byCtrlMsgPrs2.BIT[MSG_CTRL_TOPPRS_2_HAS_RX_COPY_BIT], 1; 
+  // MovBits  byTempCondByte1.BIT[0], byCtrlMsgPrs2.BIT[MSG_CTRL_TOPPRS_2_HAS_RX_COPY_BIT], 1; 
    Nop;
    
    // In case the packet is from port that has RX copy attributes, avoid discarding the packet
@@ -532,30 +518,11 @@ FRAME_CONT_ACTION_LAB:
 /* This is the main data flow of the system, which means: apply the features configured on the frame */
 #define IP_VERSION_BIT byTempCondByte1.bit[0];
 
-   //jmp PARSE_AND_CALC_HASH, NO_NOP; // Perform packet parsing
-#ifdef __SIM__
-   PutKey UNF_CTX_STR_IDX(COM_KBS) , CTX_LINE_DUMMY_FOR_TCAM , 1;
-#endif
-   //Mov PC_STACK, PA_HANDLING_LAB, 2;
+    movbits IP_VERSION_BIT, sHWD_bitL3IsIpV6  , 1; //IP_VERSION_BIT (UREG[1].byte[0]) might be overridden in parseFrameWithPA
 
-// For port that has "SLT VLAN" attribute, there is no need to run packet anomalies, and any of the security features in TOP resolve.
-// Instead, packets from this port will be treated as if the global processing mode is bypass (host or network)
-// TODO: this part of code is here because hash calculations are required (in PARSE_AND_CALC_HASH).
-//       In case there is no need for the hash value, move the below lines to be performed in the FRAME_CONT_ACTION_LAB label, before
-//       running parsing code.
-
-   Xor ALU, $usrVlanTag, uqTmpReg1, 2;// Silicom packet check: Comparison
-      //movbits byTempCondByte1.BIT[MSG_CTRL_TOPPRS_2_SLT_VLAN_BIT], bitPRS_isSltVlanMode, 1;
-   nop;
-   JZ HOST_P0_BYPASS_LAB, NO_NOP;       // Silicom packet check: TO_CPU if it is Silicom packet
-      Xor ALU, byFrameActionOverrideReg, FRAME_BYPASS_HOST, 1;//check if an override action is set
-      Mov byFrameActionReg, FRAME_CONT_ACTION, 1;
-   JZ HOST_P0_BYPASS_LAB, NOP_2;       // Silicom packet check: TO_CPU if it is Silicom packet
 varundef usrVlanTag;
 
 
-//If (byTempCondByte1.BIT[MSG_CTRL_TOPPRS_2_SLT_VLAN_BIT]) Jmp PRS_SLT_VLAN_LAB, NOP_1;
-   movbits IP_VERSION_BIT, sHWD_bitL3IsIpV6  , 1; //IP_VERSION_BIT (UREG[1].byte[0]) might be overridden in parseFrameWithPA
 
 
 ////////////////////////////////////////////////////////////
@@ -666,9 +633,11 @@ Copy MSG_SIP_OFF_3RD (HW_KBS), IPv6_SIP_OFF(FMEM_BASE), 8, SWAP;        // TREG.
 Copy MSG_IP_TTL_OFF  (HW_KBS), IPv6_HOP_LIMIT_OFF(FMEM_BASE), 1;
 
 UNF_KEY_BUILD_END:
-
+/*
 MovBits byCtrlMsgPrs0.bit[MSG_CTRL_TOPPRS_0_ANALYZE_POLICY_BIT], uqGcCtrlReg0.bit[GC_CNTRL_0_POLICY_NON_EMPTY_BIT], 1; //update Policy existance bit
 MovBits byCtrlMsgPrs0.bit[MSG_CTRL_TOPPRS_0_ALST_EMPTY_BIT], uqGcCtrlReg0.bit[GC_CNTRL_0_ALIST_NONE_EMPTY_BIT], 1; //update ACL active bit
+*/
+Mov2Bits byCtrlMsgPrs0.bits[ MSG_CTRL_TOPPRS_0_ANALYZE_POLICY_BIT , MSG_CTRL_TOPPRS_0_ALST_EMPTY_BIT ] , uqGcCtrlReg0.bits[  GC_CNTRL_0_POLICY_NON_EMPTY_BIT , GC_CNTRL_0_ALIST_NONE_EMPTY_BIT];
 
 #define tmp_FLAGS_REG  byTempCondByte2;
 #define IP_VERSION_BIT byTempCondByte1.bit[0];
@@ -703,7 +672,7 @@ xor ALU, tmp_FLAGS_REG, TCP_RST_ACK_FLAGS, 4, MASK_0000001F, MASK_SRC1;
 nop;
 jnz DBG_CONTINUE1;
      //check if tcp frame , if no skip the rest
-    if(!uqCondReg.bit[25]) jmp  END_OF_SYN;
+    if(!tmp_FLAGS_REG.bit[1]) jmp  END_OF_SYN;
       Putkey UNF_PROT_PORT_OFF(COM_KBS), bySrcPortReg, CMP_POLICY_PORT_SIZE;  
 
 MovBits tmp_FLAGS_REG.bit[TCP_ACK_FLAG_OFF], 0, 1;
@@ -1279,8 +1248,7 @@ if (tmp_FLAGS_REG.bit[TCP_PSH_FLAG_OFF]) jmp CALC_HASH_LOCAL, NOP_2;
 // Although, if this is SYN, perhaps we still need to calculate 
 // Hash function for SYN-Cookie calculation?
 
-jmp PRS_DONE_LAB;
-  MovBits byCtrlMsgPrs0.bit[MSG_CTRL_TOPPRS_0_PERFORM_SYN_PROT_BIT] , 1 , 1;
+jmp PRS_DONE_LAB , NOP_1;
   // Unset OOS control bits
   movbits byCtrlMsgPrs0.bit[MSG_CTRL_TOPPRS_0_TCP_OOS_SYN_ACK_BIT], 0, 3;
 //  movbits uqGcCtrlReg0.bit[GC_CNTRL_0_TCP_OOS_POLICY_CLASS_BIT], 0, 1;

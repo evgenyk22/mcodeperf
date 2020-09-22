@@ -83,19 +83,11 @@ ALIST_BYPASS_DISCARD_LAB:
 EZstatPutDataSendCmdIndexReg uqTmpReg5, uqTmpReg4, STS_INCR_TWO_VAL_CMD, 0, 0, 1;
 
 Jmul ERR_LAB,
-     BYPASS_NETW_LOC_LAB, 
-     ALIST_DISCARD_LAB,
-     NOP_2;
+     BYPASS_NETW_LAB, 
+     ALIST_DISCARD_LAB, NO_NOP;
+         If (RTPC_IS_ENABLED_BIT)   mov uxEthTypeMetaData, RTPC_WHITE_BYPASS, 2;
+         nop;
 
-
-BYPASS_NETW_LOC_LAB:
-       
-
-//check RTPC enable
-If (RTPC_IS_ENABLED_BIT) 
-   
-   //don't change the flow                     
-   mov uxEthTypeMetaData, RTPC_WHITE_BYPASS, 2;  
 
 
     
@@ -106,6 +98,7 @@ ALIST_DISCARD_LAB:
 
 //check if RTPC is enabled and matched.
 If (RTPC_IS_ENABLED_BIT)  mov uxEthTypeMetaData, RTPC_BLACK_LIST_DROP , 2;//set RTPC without changing the flow
+
 If (RTPC_IS_ENABLED_BIT)  movBits RTPC_IS_DOUBLE_COUNT_BIT, 0, 1;
    xor byTempCondByte, ALU, !ALU, 1, GC_CNTRL_2_MREG, MASK_BOTH; // Get GC_CNTRL_2_MREG Value
 

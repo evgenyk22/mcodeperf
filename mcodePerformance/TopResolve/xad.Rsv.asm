@@ -811,7 +811,7 @@ SYN_PROT_LAB:
 #define bySynProtCtrl      byTempCondByte;
 #define uqSynProtCounter   uqTmpReg1;
 
-/* if (!byCtrlMsgPrs0.bit[MSG_CTRL_TOPPRS_0_PERFORM_SYN_PROT_BIT])*/
+ if (!byCtrlMsgPrs0.bit[MSG_CTRL_TOPPRS_0_PERFORM_SYN_PROT_BIT])
  jmp POLICY_PERFORM_ACTION_LAB, NOP_2;
 
 GetRes byTempCondByte1, SYN_PROT_CTRL_0_OFF(SYN_PROT_DEST_STR), 1; // Get SYN Protection control bits byte[0]
