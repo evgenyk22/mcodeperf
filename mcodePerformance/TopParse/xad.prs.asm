@@ -131,102 +131,19 @@ LdPortFlow 107, 1;
 LdPortFlow 116, 2;
 LdPortFlow 117, 3;
 
-//##TODO_OPTIMIZE - need to change the memory usage to X1.5 times ROM in order to avoid the ICS if possible.
-//                                   ICS parse 2-->4K change just now at the end of the coding.
-//                                   need to check how I can save some lines or use several pragmas for diferent ICS levels.
-//##TODO_OPTIMIZE:  Pass over all the locations that uses OUT_VID_STR and see if it should be left as is or if it should be removed. if should be removed also in transparent mode - cancel the lookup and the relevant defines (search for /* FFT_VID_STR Result Format */).
+LdDirectionLabel 4 , FRAME_FROM_2ND_NP_LAB  ;
+LdDirectionLabel 3 , FRAME_FROM_NET_CAUI_LAB ;
+LdDirectionLabel 2 , FRAME_FROM_NW_LAB;
+LdDirectionLabel 0 , FRAME_FROM_HOST_LAB;
 
+FRAME_FROM_HOST_LAB:
 
-// Input port encoding bit 7-6-5 Rx side 1 Tx side 4
-// Modulo on random number (system clock) used for performing even distribution of traffic on all available interfaces towards the network (6)
-// Modulo removed. used only for routing
-//Modulo ALU, RTC, 6, 1, MASK_000000FF, MASK_SRC1;
+Add FMEM_BASE , FMEM_BASE , 8 , 2;
+    Mov  R_PC , FRAME_BYPASS_CPU_2NETWORK_LOCAL_LAB , 4;
+    Mov byFrameActionReg , FRAME_HOST_BYPASS_2NETW  , 4;
+decode_general 0(FMEM_BASE);
 
-
-/* Set default value - DON'T perform GRE Decapsulation (MSG_CTRL_TOPPRS_2_IS_GRE_DECAP_REQUIRED_BIT = 0).
-   This will be overwritten later on if required conditions are met (RadwareGRETunnel frames is discovered).
-   Note: Other bits are also set now to zero. this should be changed as soon as more bits will be populated to MSG_CTRL_TOPPRS_2_OFF */
-MovBits CAMO.bit[16] , sHWD_bitsDirection, 5; 
-//PutKey MSG_CTRL_TOPPRS_2_OFF(HW_KBS), 0, 1;
-Mov  R_PC , CONT_LAB , 4;
-//Decode_General 0(FMEM_BASE);	 // NP4 does not make HW parsing like NP3, that's why we use this command (we can optimize by removing decoding for packets arrived from CPU)
-
-
-Mov byFrameActionReg , FRAME_CONT_ACTION  , 4;
-// Start to initialize registers
-//Mov uqTmpReg1, PORT_CFG0, 4; // ##TODO_OPTIMIZE: probably not needed - comment and pass verifications then remove if not needed anymore. if removing this line need to write the next one 1 level in to show that the modulo command is not over yet (consumes 2 clocks), so ALU is ready for the Lookcam only after 2 clocks.
-
-//#define KBS_INIT_VAL (MSG_SIZE << 16);
-// Lookcam removed. used only for routing
-//Lookcam CAMO, ALU, BCAM32[CPU_2_NET_MAP_GRP]; // Lookcam to select NP's-to-NW output port (XAUI) according to a random function (RTC value) in order to load balance.
-
-If (CAMO.bit[16]) Add FMEM_BASE , FMEM_BASE , 8 , 2;
-
-   xor uqGcCtrlReg0, ALU, !ALU, 4, GC_CNTRL_0_MREG, MASK_BOTH; // using MREG[15] 
-   //Mov byCtrlMsgPrs0, 0,    4;    // Clears byCtrlMsgPrs0, byCtrlMsgPrs1, byFrameActionReg, bySrcPortReg
-   Mov byCtrlFree,    0,    4;    // Clears byGlobFree, byCtrlMsgPrs2, byGlobConfReg, byCtrlMsgPrs3
-   
-   decode_general 0(FMEM_BASE);	 
-   //Mov byCtrlMsgPrs2, 0,    1;    // Clears byCtrlMsgPrs2
-   //Mov byGlobConfReg, 0,    1;    // Clear byGlobConfReg   
-   //Mov byFrameActionOverrideReg,0,1;// Clear byFrameActionOverrideReg   
-   //ENC_PRI does not need the below init. JMUL ignores LSbits 
-   //Mov    ENC_PRI,       0,    2;    // Clear ENC_PRI register
-   //Mov byHashVal, 0, 1;
-
-
-
-//Mov COM_HBS,       0,    1;    // Clear COM_HBS (HREG_BASE1 register)
-//Mov HW_KBS, KBS_INIT_VAL, 4; // init both KMEM_BASE0 (HW_KBS) and KMEM_BASE1 (COM_KBS) in one step.
-
-// Fix KMEM HW reset issue by workaround 
-//PutKey MSG_POLICY_ID_OFF(HW_KBS), DEF_POLICY_METADATA_ID, 2; // Init default policy ID value
-
-decode byGlobConfReg, uqGcCtrlReg0, 1, MASK_00000003, MASK_SRC1; // See GC_CNTRL_0_MREG - TOPparse MREG[15] for bitmap in xad.common.h.
-// Fix KMEM HW reset issue by workaround 
-//PutKey MSG_NP5_INTERFACE_PORT_NUM_OFF(HW_KBS) , HWD_REG1.byte[1] , 1  ; //##TODO_OPTIMIZE: check all nops after JMULs and verify if this can be done in case of jump immediately after the JMUL.
-MovBits ENC_PRI.bit[11], sHWD_bitsDirection, 5; // Get the type of the port that the frame arrvied from 
-Xor ALU , ALU , !ALU , 4  ;
-// Send calculated output port in internal message towards TOPmodify
-//MSG_CTRL_TOPPRS_3_OFF is used only for routing
-//PutKey MSG_CTRL_TOPPRS_3_OFF(HW_KBS), CAMO, 1;
-
-// Start checking bits 20,21 for port drop priority congestion status - will be used in case of jumping to FRAME_FROM_NW_LAB or FRAME_FROM_HOST_LAB
-MovBits ALU, SREG_HIGH[2].bit[20], 2; // sBdgtStatus2_bitsPortDropPri = SREG_HIGH[2].bit[20]
-
-// reset condition bit in case frame arrives from network port
-//Mov byTempCondByte1, 0, 1;
-   
-// Jump to the relevant packet handling according to inerface type as defined input port data
-// For a Jmul instruction with more than 3 labels, in case of match (jump), the two instructions that follow this instruction are not executed.
-Jmul FRAME_FROM_2ND_NP_LAB,         // corresponds to port direction FRAME_FROM_2ND_NP (frame from interlink between 2 NPs)
-     FRAME_FROM_NET_CAUI_LAB,       // corresponds to port direction PORT_DIR_NET_CAUI (frame from CAUI network port)
-     FRAME_FROM_NW_LAB,             // corresponds to port direction PORT_DIR_NET_SWITCH (frame from switch network port)
-     ERROR_HANDLING, // corresponds to port direction PORT_DIR_CTRL (frame from host control port)
-     FRAME_FROM_HOST_LAB,           // corresponds to port direction PORT_DIR_HOST (frame from host ports)
-     ERROR_HANDLING,                // error label 
-     ERROR_HANDLING;                // error label                                                      
-  
 // Fall through - unexpected - at least 1 of the bits should have been set in ENC_PRI.
-
-#ifndef __SIM___
-//ignore phys port in case of simulatior
-jmp ERROR_HANDLING, NOP_2;
-
-#else
-
-jmp  FRAME_FROM_NW_LAB, NOP_2;
-
-#endif
-
-
-    
-
-FRAME_FROM_HOST_LAB:   
-
-jmp ERROR_HANDLING, NOP_2;
-
-
 if       ( !FLAGS.BIT [ F_MCC ] )  jmp   $, NO_NOP;
     Mov FMEM_BASE ,0 , 2;
     Nop;
@@ -278,11 +195,13 @@ jmp PRS_DONE_LAB, NO_NOP;
 
                            
 FRAME_FROM_NET_CAUI_LAB:
+    decode_general 0(FMEM_BASE);
    // Frame arrived from a CAUI direct network port
 
 vardef regtype usrVlanTag    CTX_REG[3].byte[2:3];  // user vlan from packet
+vardef regtype switchVlanTag    CTX_REG[3].byte[0:1];  // user vlan from packet
 
-    Xor   $usrVlanTag  , ALU , ALU , 2;
+   Xor   $usrVlanTag  , ALU , ALU , 2;
 
    // set indication bit that the source port is CAUI
    MovBits byCtrlMsgPrs2.BIT[MSG_CTRL_TOPPRS_2_IS_CAUI_PORT_BIT], 1, 1;
@@ -291,66 +210,81 @@ vardef regtype usrVlanTag    CTX_REG[3].byte[2:3];  // user vlan from packet
    // This is done is order to have common code for all traffic coomming from network 
    Mov CAMO, PORT_DATA3, 4;
    
+  
    // set condition bit to indicate arrival from the CAUI ports label
-   Mov byTempCondByte1, 1, 1;
-
-   MovBits $usrVlanTag.bit[12]  ,  sHWD7.bit[sHWD_bitNoTags_off], 1 ;
-   MovBits $usrVlanTag , sHWD_uxTag1Vid , 12; 
+   jmp  FRAME_FROM_NW_CAUI_LAB ;
+       Mov byTempCondByte1, 1, 1;
+       Get $usrVlanTag, ETH_VID1_OFF(FMEM_BASE), 2, SWAP;
+       
+       //MovBits $usrVlanTag , sHWD_uxTag1Vid , 12; 
 
    
    
    // Fallthrough
    
 FRAME_FROM_NW_LAB:
-   // Frame arrived from on of the switch's network ports
-   Xor ALU, ALU, !ALU, 4, IC_CNTRL_0_MREG, MASK_BOTH; // ALU <- IC_CNTRL_0_MREG
 
+    decode_general 0(FMEM_BASE);
+
+FRAME_FROM_NW_CAUI_LAB:
+    
+    Mov  R_PC , CONT_LAB , 4;
+    Mov byFrameActionReg , FRAME_CONT_ACTION  , 4;
+    if (FLAGS.bit[F_FR_ERR]) jmp ERROR_HANDLING;
+        xor uqGcCtrlReg0, ALU, !ALU, 4, GC_CNTRL_0_MREG, MASK_BOTH; // using MREG[15] 
+        Mov byCtrlFree,    0,    4;    // Clears byGlobFree, byCtrlMsgPrs2, byGlobConfReg, byCtrlMsgPrs3
+   
+	 
+
+    
+//Xor ALU , ALU , !ALU , 4  ;
+// Start checking bits 20,21 for port drop priority congestion status - will be used in case of jumping to FRAME_FROM_NW_LAB or FRAME_FROM_HOST_LAB
+//MovBits ALU, SREG_HIGH[2].bit[20], 2; // sBdgtStatus2_bitsPortDropPri = SREG_HIGH[2].bit[20]
+
+   
+   decode byGlobConfReg, uqGcCtrlReg0, 1, MASK_00000003, MASK_SRC1; // See GC_CNTRL_0_MREG - TOPparse MREG[15] for bitmap in xad.common.h.        
+   
    // RT monitoring Protocol type is unknown do it preliminary for GLOB_CONF_DROP_LAB
    MovBits uqFramePrsReg.BIT[L4_TYPE_OFF], L4_UNS_TYPE, 3; //Init as default L4_TYPE_OFF
 
-   // Start preparing key for internal TCAM 64 Lookup (using TCAM since vlan can also include range)
-   MovBits uqOffsetReg0.byte[L3_OFFB], sHWD_bitsLayer3Offset, 5, RESET;
-
-   If (!FLAGS.BIT[ F_ZR ]) 
-      MovBits byCtrlMsgPrs1.bit[MSG_CTRL_TOPPRS_1_RT_EN_BIT], 1, 1; 
-
-   //store hash in global variable
-   Xor byHashVal , sHWD_byDipFolderXor , sHWD_bySipFolderXor , 1; 
+   Mov3Bits ENC_PRI.bits[15,14,13] ,  byGlobConfReg.bits[1,0,2] ; // CONT , 2 - DROP , BYPASS , 2CPU will be faling thrue
    
-   Mov FMEM_BASE, uqOffsetReg0.byte[L3_OFFB], 2;
-   
-   //Mov $uxVlanTag0Id , uqTmpReg7.byte[2] , 2;
-   PutKey UNF_VIF_OFF(COM_KBS), PORT_DATA0, 1;
+   If (!FLAGS.BIT[ F_ZR ])  MovBits byCtrlMsgPrs1.bit[MSG_CTRL_TOPPRS_1_RT_EN_BIT], 1, 1; 
    Mov byVifPortReg , PORT_DATA0, 1;
+   Mov ALU,0,4; 
+   Mov4Bits ALU.bits[4,3,2,1] , uqGcCtrlReg0.bits[GC_CNTRL_0_ALIST_NONE_EMPTY_BIT,GC_CNTRL_0_POLICY_NON_EMPTY_BIT,GC_CNTRL_0_PROT_DST_NONE_EMPTY_BIT,GC_CNTRL_0_BDOS_EMPTY_SIG_BIT];
+   PutHdr  HREG[ 1 ], MAIN_LKP;
+   Mov2Bits ALU.bits[6,5] , uqGcCtrlReg0.bits[ ~GC_CNTRL_0_ROUTING_ENABLED_BIT , GC_CNTRL_0_ROUTING_ENABLED_BIT];
+   PutKey UNF_VIF_OFF(COM_KBS), PORT_DATA0, 1;
+   PutKey UNF_TASK_CNTR(COM_KBS), ALU , 1; 
    PutKey MSG_POLICY_ID_OFF(HW_KBS), DEF_POLICY_METADATA_ID, 2; // Init default policy ID value
-   //PutKey MSG_NP5_INTERFACE_PORT_NUM_OFF(HW_KBS) , HWD_REG1.byte[1] , 1  ; //##TODO_OPTIMIZE: check all nops after JMULs and verify if this can be done in case of jump immediately after the JMUL.
-    
-   Mov byFrameActionReg, FRAME_BYPASS_HOST, 1;
-   Copy   MSG_SIP_OFF(HW_KBS ), IP_SIP_OFF (FMEM_BASE),4, SWAP;
-   
-   If (byTempCondByte1.BIT[0])  
-      jmp RESULT_IS_READY_IN_CAMO_LAB, NO_NOP;
+  
+   //is caui ?
+   If (byTempCondByte1.BIT[0]) jmp RESULT_IS_READY_IN_CAMO_LAB, NO_NOP;
          movbits IP_VERSION_BIT, sHWD_bitL3IsIpV6  , 1;  //Assume IPv4 , if no will be overrided by IPv6 flag  
          MovBits uqOffsetReg0.byte[L3_OFFB], sHWD_bitsLayer3Offset, 5, RESET;
 
 SWITCH_TCAM_SEARCH_LAB:
 
-   And ALU ,  sHWD7 , {7<< sHWD_bitTwoTags_off } , 1;
-   MovBits $usrVlanTag , sHWD_uxTag2Vid , 12; 
+   //And ALU ,  sHWD7 , {7<< sHWD_bitTwoTags_off } , 1;
    
+   //MovBits $usrVlanTag , sHWD_uxTag2Vid , 12; 
+   
+
    //set default vlan value 0x1000 if packet from switch  and no user vlan tag inside
-   If (FLAGS.BIT[F_ZR]) MovBits $usrVlanTag.bit[12] , 1 , 1; 
+   //If (FLAGS.BIT[F_ZR]) MovBits $usrVlanTag.bit[12] , 1 , 1; 
 
-
+   Get $switchVlanTag, ETH_VID1_OFF(FMEM_BASE), 2, SWAP;
+   
    // Start calculating the src port 
-   Mov CAMI, 0, 4; // Nop;
+   //Mov CAMI, 0, 4; // Nop;
    Mov ALU  , RX_VLAN_0 , 2;
-   Sub CAMI , sHWD_uxTag1Vid , ALU , 2;
+   Sub CAMI , $switchVlanTag , ALU , 2;
    LookCam CAMO, CAMI, BCAM8[ FFT_BCAM8_GRP ];
 
+   Get $usrVlanTag, ETH_VID2_OFF(FMEM_BASE), 2, SWAP;  
 
-
-Mov FMEM_BASE, uqOffsetReg0.byte[L3_OFFB], 2;
+//Mov FMEM_BASE, uqOffsetReg0.byte[L3_OFFB], 2;
 //Mov byFrameActionReg, FRAME_BYPASS_HOST, 1;
 //Nop; //movbits IP_VERSION_BIT, sHWD_bitL3IsIpV6  , 1;  //Assume IPv4 , if no will be overrided by IPv6 flag  
 
@@ -361,6 +295,7 @@ if (!FLAGS.BIT[F_MH]) jmp TCAM_SEARCH_FAIL_LAB, NO_NOP;
 
 RESULT_IS_READY_IN_CAMO_LAB:
 
+ 
  //clear routing mode selectin for SSL port type
 If (CAMO.bit[SSL_PORT_DET]) MovBits bitPRS_isRoutingMode , 0 ,1 ;
 
@@ -372,12 +307,20 @@ MovBits bySrcPortReg, CAMO.bit[FFT_VIF_DATA_PHYSPRT_OFF], FFT_VIF_DATA_PHYSPRT_S
 PutKey UNF_VIF_OFF(COM_KBS), ALU, 1;
 Mov byVifPortReg , ALU, 1;
 
+  // Start preparing key for internal TCAM 64 Lookup (using TCAM since vlan can also include range)
+MovBits uqOffsetReg0.byte[L3_OFFB], sHWD_bitsLayer3Offset, 5, RESET;
+
+   //store hash in global variable
+Xor byHashVal , sHWD_byDipFolderXor , sHWD_bySipFolderXor , 1; 
+   
+Mov FMEM_BASE, uqOffsetReg0.byte[L3_OFFB], 2;
+
 
 
 PER_VIF_COUNTING_LAB:
 
 //--bug should be in driver  swap GC_CNTRL_0_GRE_TUN_CFG_BIT and GC_CNTRL_0_POL_CTRL_ACTIVE_BIT
-MovBits uqGcCtrlReg0.bit[GC_CNTRL_0_GRE_TUN_CFG_BIT] , uqGcCtrlReg0.bit[GC_CNTRL_0_POL_CTRL_ACTIVE_BIT] , 1;
+//MovBits uqGcCtrlReg0.bit[GC_CNTRL_0_GRE_TUN_CFG_BIT] , uqGcCtrlReg0.bit[GC_CNTRL_0_POL_CTRL_ACTIVE_BIT] , 1;
 
 
 //MovBits byCtrlMsgPrs2.BIT[MSG_CTRL_TOPPRS_2_IS_GRE_DECAP_REQUIRED_BIT], bitTmpCtxReg2RemoveRdwrGRETunnel, 1; 
@@ -395,12 +338,6 @@ PutKey UNF_PROT_VLAN_OFF (COM_KBS), $usrVlanTag , 2;
 //If (CAMO.bit [SSL_PORT_DET]) Mov byFrameActionOverrideReg , FRAME_BYPASS_HOST  , 1;
 
 
-Mov ALU,0,4; 
-Mov4Bits ALU.bits[4,3,2,1] , uqGcCtrlReg0.bits[GC_CNTRL_0_ALIST_NONE_EMPTY_BIT,GC_CNTRL_0_POLICY_NON_EMPTY_BIT,GC_CNTRL_0_PROT_DST_NONE_EMPTY_BIT,GC_CNTRL_0_BDOS_EMPTY_SIG_BIT];
-PutHdr  HREG[ 1 ], MAIN_LKP;
-Mov2Bits ALU.bits[6,5] , uqGcCtrlReg0.bits[ ~GC_CNTRL_0_ROUTING_ENABLED_BIT , GC_CNTRL_0_ROUTING_ENABLED_BIT];
-nop;
-PutKey UNF_TASK_CNTR(COM_KBS), ALU , 1; 
 
  
 #include "xad.prs.parser.asm"
