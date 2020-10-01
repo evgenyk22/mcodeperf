@@ -25,6 +25,25 @@
 #define byCtrlMsgPrs0               UREG[2].byte[0];      //1 byte, holds 1st byte of control bits in message from TOPparse to TOPresolve
 #define byCtrlMsgPrs1               UREG[2].byte[1];      //1 byte, holds 2nd byte of control bits in message from TOPparse to TOPresolve
 
+//directly mapped from topparse
+#define uqFramePrsReg               UREG[5]
+#define VLAN_TAG_NUM                0;  // 2 bit size, the number of VLANs in the frame.
+#define L4_PROTOCOL_OTHER           1;  // 1 bit size, L4 proto is not in{TCP , UDP , ICMP , SCTP , IGMP , GRE , IPinIP, IPSEC}
+#define L3_TYPE_OFF                 3;  // 1 bit size: 0-IPv4, 1-Ipv6
+#define JUMBO_PCKT_STATUS_OFF       4;  // 1 bit size
+#define TUN_EN_OFF                  5;  // 1 bit size, mark if frame has a tunnel that is also enabled (AmitA: probably the main idea for the use of uqFramePrsReg.bit[TUN_EN_OFF] is that the IPinIP tunnel is not the outer tunnel in the frame, then all deeper tunnels inspection should be stopped)
+#define TUN_PA_SKIP                 6;  // 1 bit size, '0' marks that this packet contains tunnel that is configured as enabled, so PA should also run in one inner level of this frame. when set to '1' means skip packet anomaly for internal headers (the inner headers may not exist in the frame, or may exist but not be enabled).
+#define L3_FRAG_OFF                 7;  // 1 bit size
+#define L4_MIN_LEN_OFF              8;  // 6 bit size   //HWD_REG5 is 6 bits long
+#define L3_NON_FIRST_FRAG_OFF       14; // 1 bit size, mark if it is a fragmented frame, but this is not the first fragment.
+// 15 free
+#define L4_TYPE_OFF                 16; // 3 bit size  // Important: Must remain in sync with L4_TYPE_OFFB
+#define L4_FLAGS_OFF                19; // 5 bit size
+#define TUN_TYPE_OFF                24; // 3 bit size, Type of tunnel: 001 - GRE, 010 - GTP, 011 - IPinIP, 100 - L2TP
+#define SYN_TUN_FLAG_DIS_OFFSET     27; // 1 bit size: 1-tunnel flags disable syn/ack generation
+#define TUN_L3_TYPE_OFF             28; // 1 bit size: 0-IPv4, 1-Ipv6
+#define TUN_L4_TYPE_OFF             29; // 3 bit size 
+
 
 #define byCtrlMsgRsv0               CTX_REG[5].byte[0];
 #define byCtrlMsgRsv1               CTX_REG[5].byte[1];
@@ -86,7 +105,7 @@
 #define uxTmpReg2                   CTX_REG[2].byte[2];
                             
 
-#define byFrameActionReg            UREG[15].byte[0]; //1 byte, holds the action that should be performed on the frame
+//#define             UREG[15].byte[0]; //1 byte, holds the action that should be performed on the frame
 #define byPolicyOOSActionReg        UREG[15].byte[1]; //1 byte uses temporary as storage of OOS action set
 
 // The following 2 bytes must remain adjacent since they are read\written together

@@ -545,8 +545,13 @@ jmp SEND_METADATA_MODE_CHECK_LAB, NO_NOP;
 
 
 CHANGE_SWITCH_VLAN_FOR_CPU_SIDE_LAB:
-GetRes bytmp3, MSG_CORE_NUM_OFF(MSG_STR), 1;
-GetRes bytmp1, MSG_SRC_PORT_OFF(MSG_STR), 1;
+
+Get uqTmpReg8 , ETH_VID_OFF(L2_FR_PTR), 2 , SWAP;
+Mov ALU , RX_VLAN_BASE , 2;
+Sub ALU ,  uqTmpReg8 , ALU , 2;
+
+GetRes bytmp3, MSG_CORE_NUM_OFF(MSG_STR), 1; //???
+Mov  bytmp1, ALU , 1;
 
 // Implemented a new solution:
 // VLAN in the following format: [0-4: ACC core][4-10: 0][11-15: port number].

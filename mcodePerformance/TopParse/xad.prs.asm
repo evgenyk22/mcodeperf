@@ -136,26 +136,44 @@ LdDirectionLabel 3 , FRAME_FROM_NET_CAUI_LAB ;
 LdDirectionLabel 2 , FRAME_FROM_NW_LAB;
 LdDirectionLabel 0 , FRAME_FROM_HOST_LAB;
 
+//#define TX_VLAN_BASE 0xa04
+
 FRAME_FROM_HOST_LAB:
 
 Add FMEM_BASE , FMEM_BASE , 8 , 2;
     Mov  R_PC , FRAME_BYPASS_CPU_2NETWORK_LOCAL_LAB , 4;
     Mov byFrameActionReg , FRAME_HOST_BYPASS_2NETW  , 4;
+
+
 decode_general 0(FMEM_BASE);
+
+Mov FMEM_BASE ,0 , 2;
+nop;
+Mov uqTmpReg4 , TX_VLAN_BASE , 2;
+Get ALU , ETH_VID1_OFF(FMEM_BASE), 2, SWAP , RESET;
+
+//convert to vif
+Sub ALU , ALU , uqTmpReg4 /*TX_VLAN_BASE*/ , 2;
+//PutKey MSG_NP5_INTERFACE_PORT_NUM_OFF(HW_KBS) , HWD_REG1.byte[1] , 1  ; //##TODO_OPTIMIZE: check all nops after JMULs and verify if this can be done in case of jump immediately after the JMUL.
+//Mov byFrameActionReg, FRAME_HOST_BYPASS_2NETW, 1;
+
+Mov2Bits ALU.byte[2].bits[6,5] , uqGcCtrlReg0.bits[ ~GC_CNTRL_0_ROUTING_ENABLED_BIT , GC_CNTRL_0_ROUTING_ENABLED_BIT]; 
+
+
+MovBits byCtrlMsgPrs0.bit[MSG_CTRL_TOPPRS_0_GLOB_DESC_BIT], 1, 1;
+
+PutKey 0(COM_KBS) ,  ALU, 3;
+
+PutHdr  HREG[ 1 ], HOST_LKP;
+
 
 // Fall through - unexpected - at least 1 of the bits should have been set in ENC_PRI.
 if       ( !FLAGS.BIT [ F_MCC ] )  jmp   $, NO_NOP;
-    Mov FMEM_BASE ,0 , 2;
+    nop;
     Nop;
 
 MovBits ALU , sHWD_bitsLayer3Offset , 5 , RESET;
 Add  uxCntrlGenDecoder , ALU , 8 , 2;
-
-Get ALU , ETH_VID1_OFF(FMEM_BASE), 2, SWAP;
-//PutKey MSG_NP5_INTERFACE_PORT_NUM_OFF(HW_KBS) , HWD_REG1.byte[1] , 1  ; //##TODO_OPTIMIZE: check all nops after JMULs and verify if this can be done in case of jump immediately after the JMUL.
-nop;
-PutKey MSG_SWITCH_VLAN_FROM_HOST(HW_KBS) ,  ALU, 2;
-
 
 
 // Waiting for decode_general to complete.
@@ -184,24 +202,29 @@ nop;
 Fxor byHashVal,CAMI,CAMIH,4;
 
 IP_PACKET_HASH_DONE:
-MovBits byCtrlMsgPrs0.bit[MSG_CTRL_TOPPRS_0_GLOB_DESC_BIT], 1, 1;
+//MovBits byCtrlMsgPrs0.bit[MSG_CTRL_TOPPRS_0_GLOB_DESC_BIT], 1, 1;
 
 
 
-jmp PRS_DONE_LAB, NO_NOP;
-   Mov byFrameActionReg, FRAME_HOST_BYPASS_2NETW, 1;
-   MovBits byCtrlMsgPrs0.bit[MSG_CTRL_TOPPRS_0_GLOB_DESC_BIT], 1, 1;
- 
+//jmp PRS_DONE_LAB, NO_NOP;
+Halt UNIC,HW_MSG_HDR , 
+		  ST_UREG_0_7 CTX_LINE_TOPS,  // Save UREGs 0_7 to context memory
+		  LD_UREG_0_7 CTX_LINE_TOPS,  // Load UREGs 0_7 from context memory in TOPresolve
+		  LD_PC_UREG_7;               // Start next TOP program execution at LAB from UREG[7]
+
 
                            
 FRAME_FROM_NET_CAUI_LAB:
-    decode_general 0(FMEM_BASE);
-   // Frame arrived from a CAUI direct network port
 
 vardef regtype usrVlanTag    CTX_REG[3].byte[2:3];  // user vlan from packet
 vardef regtype switchVlanTag    CTX_REG[3].byte[0:1];  // user vlan from packet
 
-   Xor   $usrVlanTag  , ALU , ALU , 2;
+    Xor   $usrVlanTag  , ALU , ALU , 2;
+    decode_general 0(FMEM_BASE);
+   // Frame arrived from a CAUI direct network port
+
+
+   
 
    // set indication bit that the source port is CAUI
    MovBits byCtrlMsgPrs2.BIT[MSG_CTRL_TOPPRS_2_IS_CAUI_PORT_BIT], 1, 1;
@@ -224,10 +247,10 @@ vardef regtype switchVlanTag    CTX_REG[3].byte[0:1];  // user vlan from packet
    
 FRAME_FROM_NW_LAB:
 
+    nop;
     decode_general 0(FMEM_BASE);
 
-FRAME_FROM_NW_CAUI_LAB:
-    
+FRAME_FROM_NW_CAUI_LAB:    
     Mov  R_PC , CONT_LAB , 4;
     Mov byFrameActionReg , FRAME_CONT_ACTION  , 4;
     if (FLAGS.bit[F_FR_ERR]) jmp ERROR_HANDLING;
@@ -250,19 +273,20 @@ FRAME_FROM_NW_CAUI_LAB:
    Mov3Bits ENC_PRI.bits[15,14,13] ,  byGlobConfReg.bits[1,0,2] ; // CONT , 2 - DROP , BYPASS , 2CPU will be faling thrue
    
    If (!FLAGS.BIT[ F_ZR ])  MovBits byCtrlMsgPrs1.bit[MSG_CTRL_TOPPRS_1_RT_EN_BIT], 1, 1; 
-   Mov byVifPortReg , PORT_DATA0, 1;
+   //Mov byVifPortReg , PORT_DATA0, 1;
    Mov ALU,0,4; 
    Mov4Bits ALU.bits[4,3,2,1] , uqGcCtrlReg0.bits[GC_CNTRL_0_ALIST_NONE_EMPTY_BIT,GC_CNTRL_0_POLICY_NON_EMPTY_BIT,GC_CNTRL_0_PROT_DST_NONE_EMPTY_BIT,GC_CNTRL_0_BDOS_EMPTY_SIG_BIT];
    PutHdr  HREG[ 1 ], MAIN_LKP;
    Mov2Bits ALU.bits[6,5] , uqGcCtrlReg0.bits[ ~GC_CNTRL_0_ROUTING_ENABLED_BIT , GC_CNTRL_0_ROUTING_ENABLED_BIT];
-   PutKey UNF_VIF_OFF(COM_KBS), PORT_DATA0, 1;
-   PutKey UNF_TASK_CNTR(COM_KBS), ALU , 1; 
-   PutKey MSG_POLICY_ID_OFF(HW_KBS), DEF_POLICY_METADATA_ID, 2; // Init default policy ID value
-  
+   //PutKey UNF_VIF_OFF(COM_KBS), PORT_DATA0, 1; 
+ 
    //is caui ?
    If (byTempCondByte1.BIT[0]) jmp RESULT_IS_READY_IN_CAMO_LAB, NO_NOP;
-         movbits IP_VERSION_BIT, sHWD_bitL3IsIpV6  , 1;  //Assume IPv4 , if no will be overrided by IPv6 flag  
-         MovBits uqOffsetReg0.byte[L3_OFFB], sHWD_bitsLayer3Offset, 5, RESET;
+     PutKey MSG_POLICY_ID_OFF(HW_KBS), DEF_POLICY_METADATA_ID, 2; // Init default policy ID value
+     PutKey UNF_TASK_CNTR(COM_KBS), ALU , 1;
+
+         //movbits IP_VERSION_BIT, sHWD_bitL3IsIpV6  , 1;  //Assume IPv4 , if no will be overrided by IPv6 flag  
+         //MovBits uqOffsetReg0.byte[L3_OFFB], sHWD_bitsLayer3Offset, 5, RESET;
 
 SWITCH_TCAM_SEARCH_LAB:
 
@@ -300,12 +324,14 @@ RESULT_IS_READY_IN_CAMO_LAB:
 If (CAMO.bit[SSL_PORT_DET]) MovBits bitPRS_isRoutingMode , 0 ,1 ;
 
    //extract 5 bits VIF[10:6] from result
-MovBits ALU, CAMO.bit[FFT_VIF_DATA_VIFID_OFF], FFT_VIF_DATA_VIFID_SIZE, RESET;
+MovBits ALU, CAMO.bit[FFT_VIF_DATA_PHYSPRT_OFF], FFT_VIF_DATA_PHYSPRT_SIZE, RESET;
    //If (!bitPRS_isRoutingMode) jmp PER_VIF_COUNTING_LAB, NO_NOP; // In transparent mode the result of DMAC_NO_MATCH is ignored
       // Save physical port
 MovBits bySrcPortReg, CAMO.bit[FFT_VIF_DATA_PHYSPRT_OFF], FFT_VIF_DATA_PHYSPRT_SIZE;
-PutKey UNF_VIF_OFF(COM_KBS), ALU, 1;
-Mov byVifPortReg , ALU, 1;
+
+if       ( !FLAGS.BIT [ F_MCC ] )  jmp   $, NO_NOP;
+    PutKey UNF_VIF_OFF(COM_KBS), ALU, 1;
+    Mov byVifPortReg , ALU, 1;
 
   // Start preparing key for internal TCAM 64 Lookup (using TCAM since vlan can also include range)
 MovBits uqOffsetReg0.byte[L3_OFFB], sHWD_bitsLayer3Offset, 5, RESET;
@@ -444,11 +470,29 @@ jmp PARSE_AND_CALC_HASH, NO_NOP;
    Mov uqInReg, 0, 4;
    Mov PC_STACK, HOST_P0_BYPASS_LAB, 2;
 
-// Build message to top resolve
+//send 2 cpu righ away
 indirect HOST_P0_BYPASS_LAB:    
-jmp PRS_DONE_LAB, NO_NOP;
-   Mov byFrameActionReg, FRAME_BYPASS_HOST, 1;
-   PutHdr  HREG[ 1 ], 0; // Don't go through TOPsearch in this case
+
+Mov FMEM_BASE , 0 , 4;
+Mov  R_PC , FRAME_BYPASS_HOST_LAB_GLOB_TMP_MODE , 4;
+Mov uqTmpReg4 , TX_VLAN_BASE , 2;
+Get ALU , ETH_VID1_OFF(FMEM_BASE), 2, SWAP , RESET;
+
+//convert to vif
+Sub ALU , ALU , uqTmpReg4 /*TX_VLAN_BASE*/ , 2;
+Mov2Bits ALU.byte[2].bits[6,5] , uqGcCtrlReg0.bits[ ~GC_CNTRL_0_ROUTING_ENABLED_BIT , GC_CNTRL_0_ROUTING_ENABLED_BIT]; 
+MovBits byCtrlMsgPrs0.bit[MSG_CTRL_TOPPRS_0_GLOB_DESC_BIT], 1, 1;
+PutKey 0(COM_KBS) ,  ALU, 3;
+PutHdr  HREG[ 1 ], HOST_LKP;
+Mov byFrameActionReg, FRAME_BYPASS_HOST, 1;
+
+//   PutHdr  HREG[ 1 ], 0; // Don't go through TOPsearch in this case
+Halt UNIC,HW_MSG_HDR , 
+		  ST_UREG_0_7 CTX_LINE_TOPS,  // Save UREGs 0_7 to context memory
+		  LD_UREG_0_7 CTX_LINE_TOPS,  // Load UREGs 0_7 from context memory in TOPresolve
+		  LD_PC_UREG_7;               // Start next TOP program execution at LAB from UREG[7]
+
+
 
 FRAME_CONT_ACTION_LAB:
 
@@ -1510,7 +1554,7 @@ If ( uqCondReg.bit[ 26 ] ) Mov ALU , LACP_TYPE_BYPASS_STAT , 1;
 PutKey   0(HW_KBS), MSG_HDR, 1;   // Put message header     // ##TODO_OPTIMIZE - when will have time for this - as this uses temp register from within a mcaro, add vardef for this register in all the locations that uses it.
 PutKey MSG_L3_TUN_OFF(HW_KBS), ALU , 2;
 PutKey MSG_HASH_CORE_OFF( HW_KBS ), 0, 1;
-PutKey MSG_HASH_2B_CORE_OFF( HW_KBS ), 0, 2;
+//PutKey MSG_HASH_2B_CORE_OFF( HW_KBS ), 0, 2;
 PutKey   MSG_ACTION_ENC_OFF(HW_KBS), FRAME_CONF_EXTRACT, 1;
 
 PutKey   MSG_SPEC_SUB_ACTION(HW_KBS), SPEC_ROUTE_CTL , 1;

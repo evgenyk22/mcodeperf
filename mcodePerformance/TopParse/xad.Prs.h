@@ -65,7 +65,7 @@ description "Version 1.96.00.00 Generic Mode";
 #define byL4Proto                      EXT_REG[9].byte[0];
 //#define uqTmpReg8 obsolete
 
-#define uxHash2BVal                    /*EXT_REG[10]*/UREG[3].byte[1];   //2 byte
+
 /* 
    Netstack  indication
    ARP,
@@ -279,6 +279,7 @@ LdMsgHdr PRS_MSG_HDR;  // This is used for copying HW_MSG (first 16 bytes of MSG
 
 #define MAIN_LKP           (LKP_VALID | (MAIN_START    << HREG_FIRST_LINE_ADDR_BIT) | (((MAIN_KMEM_SIZE - 1) >> 4) << HREG_KEY_SIZE_BIT));
 
+#define HOST_LKP           (LKP_VALID | (HOST_START    << HREG_FIRST_LINE_ADDR_BIT) | (((16 - 1) >> 4) << HREG_KEY_SIZE_BIT));
 
 /* Parse IPv4 DIP LookAside.
    The Key is located in the last chunk of 16 bytes TOPparse of KMEM (bytes 368..383).

@@ -217,6 +217,14 @@ L_ROUTING_COMMON:
 #define BDOS_TEMP_AREA 0x60 // old policy result place , no need anymoore
 #define KEYS_SAVE_AREA1 176  //32 byte 0xB0
 
+Public HOST_START:
+
+MovImm   TREG[BDOS_POLICY_RES] , 1 , 4;
+//MovBits  TREG[UNF_VIF_OFF]     , TREG[0] , 2; 
+//MovBits  TREG[UNF_VIF_OFF]     , TREG[0] , 2;
+//MovBits  TREG[UNF_TASK_CNTR]   , TREG[2] , 1;
+Write  TREG[UNF_VIF_OFF]     , POLICY_RES_CONF_STR , TREG[0] , 2;
+Write  TREG[UNF_TASK_CNTR]   , POLICY_RES_CONF_STR , TREG[2] , 1;
 
 Public MAIN_START:
 
@@ -670,7 +678,6 @@ jcond;
 jmp MAIN;
 
 
-
 #define CORE2IP_OFF_TREG  8
 
 public CORE_DISTR_LAB:
@@ -688,6 +695,4 @@ public CORE_DISTR_LAB:
 
    Write CTX CTX_LINE_CORE2IP_DISTRIBUTION, CORE2IP_STR, TREG[CORE2IP_OFF_TREG], (CORE2IP_RESULT_SIZE);
 
-   Halt;       
- 
-
+   Halt; 

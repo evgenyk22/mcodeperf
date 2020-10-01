@@ -21,8 +21,10 @@ MACRO xadAccessListResolve BYPASS_HOST_LAB,     //FRAME_BYPASS_HOST_LAB
 
 // 1. Check if AccessList is empty or not matched (in both cases continue to next feature):
 if (!byCtrlMsgPrs0.bit[MSG_CTRL_TOPPRS_0_ALST_EMPTY_BIT]) jmp CONT_LAB; // If AccessList is empty continue to next feature, meaning ACL functionality is not enabled.
-    mov byTempCondByte1, byFrameActionReg, 1;
+    //not used remove
+    mov byTempCondByte1, FRAME_CONT_ACTION, 1;
     Nop;
+
 
 GetRes uqTmpReg2, 0(ALST_RES_STR), 4;
 Mov ENC_PRI, 0, 2;

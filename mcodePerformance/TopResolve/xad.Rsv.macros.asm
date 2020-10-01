@@ -34,8 +34,7 @@ SKIP_ALIST_SAMPL_MARK_LAB:
    //GetRes  uqTmpReg6, MSG_HASH_CORE_OFF(MSG_STR), 1; // Note: frames that are not IP (i.e. L2 control frames e.g. ARP, etc) will probably always have 0 hash function result. this does not give distribution.
    // 8 bit hash mapped there
    //Mov  uqTmpReg6, UREG[6].byte[3] , 1; 
-   Putkey MSG_HASH_CORE_OFF(HW_OBS), UREG[6].byte[3] ,  1;
-   PutKey  MSG_ACTION_ENC_OFF(HW_OBS), byFrameActionReg, 1;      
+   //PutKey  MSG_ACTION_ENC_OFF(HW_OBS), byFrameActionReg, 1;      
    //Modulo  ALU, bytmp0, uqTmpReg6.byte[0] , 1;
    //LongDiv uqTmpReg6 , uqTmpReg6 , uqTmpReg7 , 2;     
    //MovBits ENC_PRI.bit[13], byFrameActionReg.bit[0], 3;
@@ -79,30 +78,7 @@ vardef regtype uqRSV_INDIRECT_CTX_LOAD    INDIRECT_CTX_LOAD.byte[0:1];  // INDIR
 
 //add route table search in case of send packet to CPU
 // I need it for correct packet marking
-    Mov2Bits byTempCondByte1.bits[0, 0], byFrameActionReg.bits[FRAME_BYPASS_HOST_BIT, FRAME_CONT_ACTION_BIT];
-    if (!bitRSV_isRoutingMode) jmp SKIP_MYIP_DETECTION;
-        Nop;
-        GetRes uqTmpReg6 , 0(INT_TCAM_STR), 3 ;
 
-    If (!byTempCondByte1.bit[0]) Jmp SKIP_CORE_DISTRIBUTION;
-        Sub ALU, uqTmpReg6.byte[0], 0x51, 1; // check match from the TCAM lookup, with support future enhancement for concurrent parallel lookups.
-        Nop; 
-   
-    
-    if (!FLAGS.bit[F_ZR]) Mov uqTmpReg6.byte[1] , 0xFFFF , 2;  
-
-    
-    PutHdr HREG[ COM_HBS ], RSV_ROUTE_2HOST_LKP_HDR;
-
-    and ALU, uqTmpReg6.byte[1], uqTmpReg6.byte[1] , 2, MASK_000007FF, MASK_BOTH;    
-    Nop;
-    PutKey KMEM_OFFSET ( HW_OBS ),  ALU, 2;
-    Add COM_HBS  , COM_HBS ,  1 , 1;
-    MovBits byTemp3Byte0.bit[/*(CTX_LINE_OUT_IF*/CTX_LINE_ROUTING_TABLE_RSLT]  , 1 , 1;    
-    Add KMEM_OFFSET , KMEM_OFFSET , RSV_FFT_RX_COPY_PORT_LKP_KEY_SIZE_KMEM_ALIGN , 1;
-
-
-SKIP_MYIP_DETECTION:
 
     //Jmp SKIP_CORE_DISTRIBUTION, NOP_2;
    
@@ -122,8 +98,8 @@ SKIP_CORE_DISTRIBUTION:
 
    Mov ALU , /*MSG_CTRL_TOPRSV_2_OFF(MSG_STR)*/byCtrlMsgRsv2 , 1;
 
-   movbits $uqRSV_INDIRECT_CTX_LOAD , byTemp3Byte0 , 4;   
-
+   //movbits $uqRSV_INDIRECT_CTX_LOAD , byTemp3Byte0 , 4;   
+   nop;
    //restore bit 2,3 from top parse information 
    MovBits byCtrlMsgPrs2Rsv2.bit[2] , ALU.bit[2] , 2;   
    //change beheviour of this bit to indicate RTPC/Marking status
@@ -589,7 +565,7 @@ Nop;
 // Yellow - sample
 // RED - perform action
 /* -- debug */
-
+/*
 Jmul  BDOS_TB_COLOR_RED,
       BDOS_TB_COLOR_YELLOW,
       BDOS_TB_COLOR_RED,
@@ -597,8 +573,8 @@ Jmul  BDOS_TB_COLOR_RED,
       BDOS_TB_COLOR_GREEN,
       BDOS_TB_COLOR_GREEN, 
       BDOS_TB_COLOR_GREEN; 
-
-//jmp BDOS_TB_COLOR_RED , NOP_2;
+*/
+jmp BDOS_TB_COLOR_RED , NOP_2;
 
 BDOS_TB_COLOR_GREEN:
 

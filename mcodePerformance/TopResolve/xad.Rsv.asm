@@ -62,7 +62,8 @@ FRAME_BYPASS_NETWORK_TRANSPARENT_LAB:
 //RTPC is set
 If (!RTPC_IS_ENABLED_BIT) jmp SEND_PACKET_LAB, SEND_PACKET_LAB_CPU , NO_NOP;
     MovBits byCtrlMsgRsv0.bit[MSG_CTRL_TOPRSV_0_RTM_GLOB_BYPASS_BIT], 1, 1;   
-    Mov byFrameActionReg, FRAME_BYPASS_NETWORK, 1;
+    //Mov byFrameActionReg, FRAME_BYPASS_NETWORK, 1;
+    PutKey  MSG_ACTION_ENC_OFF(HW_OBS), FRAME_BYPASS_NETWORK , 1;
   
 FRAME_BYPASS_NETWORK_TRANSPARENT_CONT: 
 
@@ -77,7 +78,17 @@ ERROR_HANDLING_RSV:
 jmp FRAME_DROP_LAB, NOP_2;
 
 
+//send to engine , f.e PA sampling
 PUBLIC FRAME_BYPASS_HOST_LAB_GLOB_TMP_MODE:
+FRAME_BYPASS_HOST_LAB:        
+FRAME_BYPASS_HOST_LAB_GLOB_MODE:      
+
+
+jmp SEND_PACKET_LAB_CPU, NOP_2;
+//   PutKey  MSG_ACTION_ENC_OFF(HW_OBS), FRAME_BYPASS_HOST , 1;
+//   nop;
+
+
 if (!byCtrlMsgPrs0.bit[MSG_CTRL_TOPPRS_0_ANALYZE_POLICY_BIT]) jmp FRAME_BYPASS_HOST_LAB_GLOB_MODE, NOP_2;
 
 
@@ -86,10 +97,15 @@ PUBLIC CONT_LAB:
 //jmp CONTROL_DISCARD_LAB_CONT , NOP_2;
 
 copy 64( HW_OBS ),  0(FFT_VID_STR), 32;
-PutKey   64( HW_OBS ) , 0xF3 , 1;
+PutKey   0( HW_OBS ) , 0xF3 , 1;
 Putkey   MSG_VIF_OFF(HW_OBS) , UREG[6].byte[2] ,  1;
-PutKey  MSG_L3_USR_OFF(HW_OBS) , UREG[4] , 4; 
-//PutKey MSG_CTRL_TOPRSV_0_OFF(
+Putkey   MSG_HASH_CORE_OFF(HW_OBS), UREG[6].byte[3] ,  1;
+PutKey   MSG_L3_USR_OFF(HW_OBS) , UREG[4] , 4; 
+
+//default action continue , mb changed according 2 seq results
+PutKey  MSG_ACTION_ENC_OFF(HW_OBS), FRAME_CONT_ACTION , 1;
+
+
 
 MovBits byGlobalStatusBitsReg.bit[SRC_100G_BIT] , byCtrlMsgPrs2Rsv2.BIT[MSG_CTRL_TOPPRS_2_IS_CAUI_PORT_BIT] , 1;
 
@@ -336,27 +352,46 @@ Jmul POLICY_ACTION_BYPASS_LAB,       // Bypass to network after policy handling
 
 
 //FRAME_BYPASS_HOST_LAB:        
-FRAME_BYPASS_HOST_LAB_GLOB_MODE:      
-FRAME_BYPASS_HOST_LAB:
-jmp SEND_PACKET_LAB_CPU, NO_NOP;
-   mov byFrameActionReg, FRAME_BYPASS_HOST, 1;  //set action bypass to host
-   nop;
+//FRAME_BYPASS_HOST_LAB_GLOB_MODE:      
+//FRAME_BYPASS_HOST_LAB:
+//jmp SEND_PACKET_LAB_CPU, NO_NOP;
+//   PutKey  MSG_ACTION_ENC_OFF(HW_OBS), FRAME_BYPASS_HOST , 1;
+//   nop;
 
 
 //send packet to network, disable Vlan replace
 PUBLIC FRAME_BYPASS_CPU_2NETWORK_LOCAL_LAB:
 
-FRAME_BYPASS_CPU_2NETWORK_LAB:
-EZstatIncrByOneIndexImm  GS_TRL_IN_RCV; //increment number of internal packets received on TOP Resolve   
+PutHdr HREG[ 0 ], RSV_MSG_HDR;
 
-If (bitRSV_isRoutingMode) jmp SKIP_FFT_FROM_HOST_HARDCODED_LAB , NOP_2;
-copy KMEM_RSV2SRH2_FFT_KEY_OFF( HW_OBS ),  MSG_SWITCH_VLAN_FROM_HOST(MSG_STR), 2; 
+copy 64( HW_OBS ),  0(FFT_VID_STR), 32;
 
-SKIP_FFT_FROM_HOST_HARDCODED_LAB:
 
-jmp SEND_PACKET_LAB_CPU, NO_NOP;    
-   Mov byFrameActionReg, FRAME_HOST_BYPASS_2NETW, 1; //set action bypass to network
-   Mov byCtrlMsgRsv0 , byCtrlMsgPrs0 , 1;
+PutKey   0( HW_OBS ) , 0xF3 , 1;
+Putkey   MSG_VIF_OFF(HW_OBS) , UREG[6].byte[2] ,  1;
+Putkey   MSG_HASH_CORE_OFF(HW_OBS), UREG[6].byte[3] ,  1;
+PutKey  MSG_ACTION_ENC_OFF(HW_OBS), FRAME_HOST_BYPASS_2NETW , 1;
+Mov byCtrlMsgRsv0 , byCtrlMsgPrs0 , 1;
+nop;
+copy 8( HW_OBS ),  8(MSG_STR), 16;
+nop;
+nop;
+nop;
+halt UNIC,
+     HW_MSG_HDR;
+
+///aaaaaa
+//Putkey MSG_HASH_CORE_OFF(HW_OBS), UREG[6].byte[3] ,  1;
+
+//FRAME_BYPASS_CPU_2NETWORK_LAB:
+//EZstatIncrByOneIndexImm  GS_TRL_IN_RCV; //increment number of internal packets received on TOP Resolve   
+
+//If (bitRSV_isRoutingMode) jmp SKIP_FFT_FROM_HOST_HARDCODED_LAB , NOP_2;
+//copy KMEM_RSV2SRH2_FFT_KEY_OFF( HW_OBS ),  MSG_SWITCH_VLAN_FROM_HOST(MSG_STR), 2; 
+
+//SKIP_FFT_FROM_HOST_HARDCODED_LAB:
+
+//jmp SEND_PACKET_LAB_CPU, NO_NOP;    
 
 
 // Valid for bypass to network              
@@ -394,7 +429,8 @@ PutHdr HREG[ 0 ], RSV_MSG_HDR;
 //check jumbo flags and Policy Update status
 
     If (!byTempCondByte.bit[MSG_CTRL_TOPPRS_0_JUMBO_STATUS_BIT]) jmp SEND_PACKET_LAB;
-        Mov UREG[1].byte[3] , byFrameActionReg , 1;  
+        nop; // may be bug , but jumbo , lacp not there 
+        //Mov UREG[1].byte[3] , byFrameActionReg , 1;  
         GetRes byTempCondByte,  MSG_CTRL_TOPPRS_2_OFF(MSG_STR), 2;   // both byCtrlMsgPrs0 and byCtrlMsgPrs1 are initilized here        
 
 If (UREG[1].byte[3].bit[FRAME_HOST_BYPASS_2NETW_BIT]) jmp SEND_PACKET_LAB , NOP_2;
@@ -402,7 +438,8 @@ If (UREG[1].byte[3].bit[FRAME_HOST_BYPASS_2NETW_BIT]) jmp SEND_PACKET_LAB , NOP_
 
 
 MovBits byCtrlMsgRsv0.bit[MSG_CTRL_TOPRSV_0_RTM_GLOB_BYPASS_BIT], 1, 1;   
-Mov byFrameActionReg, FRAME_BYPASS_NETWORK, 1;
+//Mov byFrameActionReg, FRAME_BYPASS_NETWORK, 1;
+PutKey  MSG_ACTION_ENC_OFF(HW_OBS), FRAME_BYPASS_NETWORK , 1;
 
 
 
@@ -436,9 +473,9 @@ if (!bitRSV_isRoutingMode) jmp AFTER_ROUTING_TABLE_INDEX_RESULT_CHECK_LAB, NOP_2
 // Check according to byFrameActionReg that packet is destined to network (and not to the host).
 // According to Guy when sending to network frameAction should be any of (FRAME_BYPASS_NETWORK | FRAME_HOST_BYPASS_2NETW | FRAME_CONT_ACTION),
 // and it is assured that if frameAction is any of these - the frame is not destined to the host.
-and ALU, byFrameActionReg, (FRAME_BYPASS_NETWORK | FRAME_HOST_BYPASS_2NETW), 1;
-nop;
-jz AFTER_ROUTING_TABLE_INDEX_RESULT_CHECK_LAB, NOP_2;
+//and ALU, byFrameActionReg, (FRAME_BYPASS_NETWORK | FRAME_HOST_BYPASS_2NETW), 1;
+//nop;
+//jz AFTER_ROUTING_TABLE_INDEX_RESULT_CHECK_LAB, NOP_2;
 
 
 /* This is Routing mode and frame is destined to the network.
@@ -569,19 +606,34 @@ jmp TOP_RESOLVE_RTPC_COUNTER_LOOP, NO_NOP;
 TOP_RESOLVE_TERMINATION_AFTER_RTPC:
 PutKey MSG_METADATA_ETH_TYPE_VAL(HW_OBS), uxEthTypeMetaData, 2;
 
-Mov INDIRECT_CTX_LOAD, 0, 2;
-PrepareRsvMsg;         
 
+xor ALU, ALU, !ALU, 4, TRAFFIC_ENGINE_NUMBER, MASK_BOTH; 
+GetRes uqTmpReg6.byte[0] , MSG_HASH_CORE_OFF(MSG_STR), 1;
+//    Copy { KMEM_RSV2SRH2_FFT_KEY_OFF+RSV_FFT_TX_COPY_PORT_LKP_KEY_SIZE_KMEM_ALIGN + 2} ( HW_OBS ),  MSG_HASH_CORE_OFF(MSG_STR), 1;
+Mov uqTmpReg6.byte[2] , ALU , 1; 
+nop;
+PutKey 96( HW_OBS ),  uqTmpReg6 , 4; 
+
+PutHdr HREG[ 1 ], ((LKP_VALID  | ( CORE_DISTR_LAB << HREG_FIRST_LINE_ADDR_BIT) | (((RSV_FFT_TX_COPY_PORT_LKP_KEY_SIZE - 1) >> 4) << HREG_KEY_SIZE_BIT) | (KEY_TYPE_1 << HREG_KEY_TYPE_BIT))) ; 
+EZwaitFlag F_CTX_LA_RDY_0;
+PrepareRsvMsg; 
+
+MovBits INDIRECT_CTX_LOAD.bit[CTX_LINE_CORE2IP_DISTRIBUTION], 1, 1 , RESET; 
+        
+nop;
+//nop;
 //Finish handling with non search and jump to the next stage (TOPmodify) 
 
 halt UNIC,
-     HW_MSG_HDR;
+     HW_MSG_HDR,
+     IND_LD_CTX;
+     
 
 /*
 halt UNIC,
      HW_MSG_HDR,
      LD_CTX_BITMAP 1,
-     LD_IGN_CTX_READY 0;
+     LD_IGN_CTX_READY 1;
 */            
 
 
@@ -1191,7 +1243,7 @@ SYN_PROT_PREPARE_CHALLENGE_AFTER_RTPC:
 copy { 64 + TX_COPY_IN_VID } ( HW_OBS ),  { TX_COPY_SYN_IN_VID } (FFT_VID_STR), 8;
 
 // Prepare challenge - ACK (Safe Reset) \ SYN-ACK (T.Proxy) \ RST (TCP Reset)
-mov byFrameActionReg, FRAME_SYN_COOKIE_GEN , 1;
+PutKey  MSG_ACTION_ENC_OFF(HW_OBS), FRAME_SYN_COOKIE_GEN , 1;
 
 jmp rtmCountersPerPolicyUpdate_LAB, NO_NOP;
     Mov PC_STACK, SEND_PACKET_LAB, 2;
@@ -1503,8 +1555,10 @@ Mov uqTmpReg3, 0, 4;
 // - Packets from HOST
 // - For drop case should doesn't matter
 if (byCtrlMsgPrs0.bit[MSG_CTRL_TOPPRS_0_GLOB_DESC_BIT]) jmp SKIP_RT_CALC, NO_NOP;
-    GetRes uqTmpReg5.byte[2], MSG_SRC_PRT_OFF(MSG_STR), 1 ;  // GetRes real offset to counter 
+    MovBits uqTmpReg5.byte[2].bit[3], UREG[6].byte[1] , 5 ;  // GetRes real offset to counter  --no need could be optimized
     GetRes uqTmpReg4, MSG_CONTROL_HW_MSG_FR_LEN_OFF(MSG_STR), 2, RESET;
+
+    MovBits uqTmpReg5.byte[2].bit[0] , uqFramePrsReg.bit[L4_TYPE_OFF] ,  3;
 
 //Mov ALU , 4 , 4; // ##TODO_OPTIMIZE - what is this line needed for???
 if (!byCtrlMsgPrs1.bit[MSG_CTRL_TOPPRS_1_RT_EN_BIT]) jmp SKIP_RT_CALC, NO_NOP;
@@ -1543,14 +1597,18 @@ rtmCountersExcludeUpdate_LAB:
 Mov   uqTmpReg5 , 0 , 4;
 Mov   uqTmpReg3 , 0 , 4;
 
-GetRes uqTmpReg5.byte[2], MSG_SRC_PRT_OFF(MSG_STR), 1 ;  // get real offset to counter 
-GetRes uqTmpReg4, MSG_CONTROL_HW_MSG_FR_LEN_OFF(MSG_STR), 2, RESET;
+//GetRes uqTmpReg5.byte[2], MSG_SRC_PRT_OFF(MSG_STR), 1 ;  // get real offset to counter 
+//GetRes uqTmpReg4, MSG_CONTROL_HW_MSG_FR_LEN_OFF(MSG_STR), 2, RESET;
+    MovBits uqTmpReg5.byte[2].bit[3], UREG[6].byte[1] , 5 ;  // GetRes real offset to counter  --no need could be optimized
+    GetRes uqTmpReg4, MSG_CONTROL_HW_MSG_FR_LEN_OFF(MSG_STR), 2, RESET;
+
+    MovBits uqTmpReg5.byte[2].bit[0] , uqFramePrsReg.bit[L4_TYPE_OFF] ,  3;
 
 
 
 //get extra shift <<2 MSG_SRC_PRT_OFF message packet (port(7-3) , prot (2-0) )
-MovBits uqTmpReg5.byte[0].bit[1] , uqTmpReg5.byte[2].bit[0] , 8; 
 Mov ALU, RT_MONITOR_EXLUD_BASE_CNTR, 4;
+MovBits uqTmpReg5.byte[0].bit[1] , uqTmpReg5.byte[2].bit[0] , 8; 
  
 //Mov uqTmpReg2 , RT_MONITOR_BASE_CNTR , 4;
 
@@ -1594,11 +1652,14 @@ rtmCountersPerPolicyUpdate_LAB:
 Mov   uqTmpReg5 , 0 , 4;
 if ( !byGlobalStatusBitsReg.bit[RTM_RECIVE_DROP_IND_BIT] ) jmp DROP_COUNTER_LAB, NO_NOP;
     Mov   uqTmpReg3 , 0 , 4;
-    GetRes uqTmpReg5.byte[2], MSG_SRC_PRT_OFF(MSG_STR), 1 ;  // get real offset to counter 
+    MovBits uqTmpReg5.byte[2].bit[0] , uqFramePrsReg.bit[L4_TYPE_OFF] ,  3;
+    
 
 //check if recive per policy counter already updated
 //$$$$$$$$ should it be first command ?????????????
-if ( byGlobalStatusBitsReg.bit[RTM_RECIVED_IND_BIT] ) jmp SKIP_POLICY_RT_CALC, NOP_2; 
+if ( byGlobalStatusBitsReg.bit[RTM_RECIVED_IND_BIT] ) jmp SKIP_POLICY_RT_CALC;     
+    MovBits uqTmpReg5.byte[2].bit[3], UREG[6].byte[1] , 5 ;  // GetRes real offset to counter  --no need could be optimized
+    nop;
 
 DROP_COUNTER_LAB:
 
@@ -1654,7 +1715,7 @@ PUBLIC SPEC_ROUTE:
 // set MSG_CTRL_TOPRSV_1_INTERLINK_PACKET_BIT bit in message to Top Modify
    // For frame from peer NP device, no context lines are loaded to Modify, so clear all bits
    // in the INDIRECT_CTX_LOAD register (used in the halt command)
-   PutKey  MSG_ACTION_ENC_OFF(HW_OBS), byFrameActionReg, 1;
+   //PutKey  MSG_ACTION_ENC_OFF(HW_OBS), byFrameActionReg, 1;
    Mov INDIRECT_CTX_LOAD, 0, 2;
    
    If (UREG[1].bit[1]) jmp  L_RSV_PPS_INBLIM_START, NOP_2;      

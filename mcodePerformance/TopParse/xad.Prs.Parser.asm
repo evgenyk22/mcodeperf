@@ -340,7 +340,9 @@ If ( !uqGcCtrlReg0.bit[ GC_CNTRL_GLOB_TUNNEL_STATUS_BIT ] ) jmp  GET_FLEN_ERR_FR
 Add ALU , FMEM_BASE , ALU , 2;
 Sub ALU , ALU , sHWD_uxFrameLen , 2;
 // Get hash 2 bytes
-Mov uxHash2BVal, HWD_REG5.byte[0], 2;
+//Mov uxHash2BVal, HWD_REG5.byte[0], 2;
+
+PutKey MSG_HASH_2B_CORE_OFF(HW_KBS), HWD_REG5.byte[0], 2 ;
 //indicate frame len error 
 //if (!FLAGS.bit[F_ZR]) MovBits CAMO.bit[18] , 1 ,1;
 if (A) MovBits CAMO.bit[18] , 1 ,1;
@@ -384,8 +386,10 @@ Mov PA_CASE , IC_CNTRL_0_IPv4_INC_PKTHDRLEN , 2 , THROW( CAMO.bit[18] );
     //set the flag to avoid calculation based on inner IP (for example in GRE) 
     //MovBits uqCondReg.bit[L3_CALC_SIP_DIP_HASH], 1, 1;
     //Nop;
-    PutKey MSG_HASH_2B_CORE_OFF( HW_KBS ), uxHash2BVal , 2;  // Store one byte hash and 2 bytes hash
-    PutKey MSG_HASH_CORE_OFF( HW_KBS ), byHashVal, 1;  // Store one byte hash and 2 bytes hash
+    //PutKey MSG_HASH_2B_CORE_OFF( COM_KBS ), uxHash2BVal , 2;  // Store one byte hash and 2 bytes hash
+    nop;
+    nop;
+    //PutKey MSG_HASH_CORE_OFF( HW_KBS ), byHashVal, 1;  // Store one byte hash and 2 bytes hash
 
 
 
@@ -779,7 +783,8 @@ DUMB_2:
 // Avoid this kind of error when packet is fragmented
 if (uqGcCtrlReg0.bit[GC_CNTRL_0_FRAME_ACTION_DROP]) Jmp IPv6_INC_PKTHDRLEN, NO_NOP;
     Fxor byHashVal, HWD_REG5.byte[0], HWD_REG5.byte[1], 1; // HWD_REG5.byte[0..1] = sIpv4ProtDec_HWD5_uxSipDipHashRes
-    Mov uxHash2BVal, HWD_REG5.byte[0], 2;                  // Get hash 2 bytes    
+    PutKey MSG_HASH_2B_CORE_OFF(HW_KBS), HWD_REG5.byte[0], 2 ;
+    //Mov uxHash2BVal, HWD_REG5.byte[0], 2;                  // Get hash 2 bytes    
 
 Mov PA_CASE , IC_CNTRL_0_IPv6_INC_PKTHDRLEN , 2 , THROW( sIpv6ProtDec_CAMO_bitPayloadLnghtGReatFrLenght /*CAMO.bit[24]*/ );     
     Nop;
@@ -1910,12 +1915,12 @@ jmp  CHK_FAIL_LAB;
 indirect PA_DRP_LAB:
 indirect PA_NET_BYPASS:
    // If sampling is not enabled continue to drop processing
-   if (!uqGcCtrlReg0.BIT[GC_CNTRL_0_IMMCHK_SAMPLENABLED_BIT]) jmp CHECK_TP_CONDITIONS_LAB, NO_NOP;
-      MovBits ENC_PRI.BIT[14],ENC_PRI.BIT[15],1; // Jmul in HANDLE_DROPPED_PACKETS_LAB expects ENC_PRI[15..13]=[TRACE_ENABLE, NET_BYPASS_LAB, PA_DISCARD_LAB]
-      Mov ALU,{ 1 << IC_CNTRL_0_JUMBOMODE_OFF },4;//Bypass enable: sampling of jumbo frame is allowed if IC_CNTRL_0_JUMBOMODE_OFF
-   
+   //if (!uqGcCtrlReg0.BIT[GC_CNTRL_0_IMMCHK_SAMPLENABLED_BIT]) jmp CHECK_TP_CONDITIONS_LAB, NO_NOP;
+    MovBits ENC_PRI.BIT[14],ENC_PRI.BIT[15],1; // Jmul in HANDLE_DROPPED_PACKETS_LAB expects ENC_PRI[15..13]=[TRACE_ENABLE, NET_BYPASS_LAB, PA_DISCARD_LAB]
+    Mov ALU,{ 1 << IC_CNTRL_0_JUMBOMODE_OFF },4;//Bypass enable: sampling of jumbo frame is allowed if IC_CNTRL_0_JUMBOMODE_OFF
+    
    //if not Jumbo(logical operation was done in previous Jmul !!), continue to sampling token bucket 
-   JZ CHECK_SAM_TB, NO_NOP;
+   JNZ GLOB_CONF_NETWORK_BYPASS_LAB;
       // Check whether configuration allows to send Jumbo to CPU: 
       //             1 - No support for jumbo frames (i.e. jumbo frames are not sampled to CPU), 
       //             0 - Jumbo frames sample to CPU is allowed
@@ -1923,9 +1928,9 @@ indirect PA_NET_BYPASS:
       PutKey  MSG_L3_USR_OFF(HW_KBS), uqOffsetReg0.byte[L3_OFFB], 4; // initialize in the message both MSG_L3_USR_OFF and MSG_L4_USR_OFF from uqOffsetReg0.byte[L3_OFFB] and uqOffsetReg0.byte[L4_OFFB]
    
    //this is a Jumbo packet
-   JNZ CHECK_TP_CONDITIONS_LAB, NOP_2;//no sampling of jumbo
+   //JNZ CHECK_TP_CONDITIONS_LAB, NOP_2;//no sampling of jumbo
 
-CHECK_SAM_TB:
+//CHECK_SAM_TB:
    EZstatPutDataSendCmdIndexReg uqTmpCtxReg1, IMM_SAMP_SIZE_CONST, STS_GET_COLOR_CMD;
       nop;
       nop;
@@ -1936,7 +1941,7 @@ CHECK_SAM_TB:
    And ALU,STAT_RESULT_L, 1<<RED_FLAG_OFF, 1;// ALU.bit[1] = 0 if sample, 1 otherwise
    Nop;
 
-   jnz CHECK_TP_CONDITIONS_LAB, NOP_2; // No sampling in case of RED color (i.e. drop\bypass), or in case of cont
+   //jnz CHECK_TP_CONDITIONS_LAB, NOP_2; // No sampling in case of RED color (i.e. drop\bypass), or in case of cont
 
    //we get here if RED==0 (sample) and action is drop or bypass
    // Sample packet to CPU (50 packets per second)
@@ -1948,25 +1953,6 @@ CHECK_SAM_TB:
    
    jmp HOST_P0_BYPASS_LAB, NOP_2;
 
-//Check Packet trace 
-CHECK_TP_CONDITIONS_LAB:
-   // Check if Trace is activated
-   xor uqCondReg, ALU, !ALU, 4, IC_CNTRL_1_MREG, MASK_BOTH;
-   MovBits uqCondReg.bit[0], ENC_PRI.bit[13], 3;
-   If(uqCondReg.bit[IC_CNTRL_1_TP_EN_OFF]) Mov byFrameActionReg, FRAME_TP_BYPASS_2NETW, 1;
-   If(uqCondReg.bit[0]) Movbits byGlobConfReg.bit[MSG_PA_TP_ACTION], 0, 1;// DROP with trace (will be used only if trace is enabled)
-   If(uqCondReg.bit[2]) Movbits byGlobConfReg.bit[MSG_PA_TP_ACTION], 1, 1;// BYPASS with trace (will be used only if trace is enabled)
-   MovBits ENC_PRI.bit[15], uqCondReg.bit[IC_CNTRL_1_TP_EN_OFF],1; // in case of trace, cont. in order to perform the trace, even if the action is DROP
-   PutKey MSG_GLOB_CONFIG_OFF(HW_KBS), byGlobConfReg, 1;// if bit 6 is 0: DROP with trace. if bit 6 is 1: BYPASS with trace. 
-
-// Count dropped or bypassed packets and continue with drop handling
-EZstatIncrByOneIndexReg uqTmpReg4;
-
-Jmul PRS_DONE_LAB,   // in case of trace, cont. in order to perform the trace, even if the action is DROP
-     CONF_NETWORK_BYPASS_LAB,       //BYPASS
-     GLOB_CONF_DROP_LAB,NO_NOP; //DROP
-     Nop;
-     Nop;
 
 //#undef icCtrlType;
 

@@ -46,7 +46,7 @@
 #define     MSG_CONTROL_PROT_DEST_STR_BIT    2     // 1 bit, indicates that lookup was done in SYN_PROT_DEST_STR table (STR29)
 
 // Message Fields Offsets
-#define MSG_HASH_2B_CORE_OFF                 1   //size 2, traffic distribution 2 bytes hash calculated by topresolve
+//#define MSG_HASH_2B_CORE_OFF                 1   //size 2, traffic distribution 2 bytes hash calculated by topresolve
 
 //#define MSG_OUTP_OFF                         3    no need anymore
 #define  MSG_CTRL_TOPPRS_3_OFF               3
@@ -215,6 +215,8 @@
 #define MSG_METADATA_RTPC_ENABLE_BIT_OFF   7   //size 1 bit
 
 // Bytes 61..63 free
+// Message Fields Offsets
+#define MSG_HASH_2B_CORE_OFF                 1   //size 2, traffic distribution 2 
 
 #define MSG_SIZE        64
 #define HW_GEN_MSG_STR      MSG_STR // HW message structure number (first 16 bytes of MSG_STR, common for TOPparse, TOPresolve & TOPmodify)
@@ -1892,17 +1894,17 @@
 
 //#define GLOBAL_RTM_IN_TOP_MODIFY 1
 
-#define UNF_BDOS_L3_KEY_OFFSET           ( UNF_TASK_CNTR  + 1 )  
+#define UNF_BDOS_L3_KEY_OFFSET           ( UNF_TASK_CNTR  + 1 ) //60  
 
-#define CMP_BDOS_L23_L3_SIZE_OFF         UNF_BDOS_L3_KEY_OFFSET       // Size 2 bytes
+#define CMP_BDOS_L23_L3_SIZE_OFF         UNF_BDOS_L3_KEY_OFFSET   //60  Size 2 bytes
 
 #define CMP_BDOS_L23_L4_PROT_OFF         UNF_L4_PROT 
 
-#define CMP_BDOS_L23_ID_NUM_OFF        ( 2 + UNF_BDOS_L3_KEY_OFFSET )  // Size 2 bytes
-#define CMP_BDOS_L23_TOS_OFF           ( 4 + UNF_BDOS_L3_KEY_OFFSET ) // Size 1 byte
-#define CMP_BDOS_L23_TTL_OFF           ( 5 + UNF_BDOS_L3_KEY_OFFSET ) // Size 1 byte
-#define CMP_BDOS_L23_FRGMNT_OFF        ( 6 + UNF_BDOS_L3_KEY_OFFSET ) // Size 2 bytes
-#define CMP_BDOS_L23_FRGMNT_FLG_OFF    ( 8 + UNF_BDOS_L3_KEY_OFFSET )  // Size 1 byte
+#define CMP_BDOS_L23_ID_NUM_OFF        ( 2 + UNF_BDOS_L3_KEY_OFFSET )  // 62 Size 2 bytes
+#define CMP_BDOS_L23_TOS_OFF           ( 4 + UNF_BDOS_L3_KEY_OFFSET ) //  64 Size 1 byte
+#define CMP_BDOS_L23_TTL_OFF           ( 5 + UNF_BDOS_L3_KEY_OFFSET ) //  65 Size 1 byte
+#define CMP_BDOS_L23_FRGMNT_OFF        ( 6 + UNF_BDOS_L3_KEY_OFFSET ) //  66 Size 2 bytes
+#define CMP_BDOS_L23_FRGMNT_FLG_OFF    ( 8 + UNF_BDOS_L3_KEY_OFFSET )  // 68 Size 1 byte
 
 /*
 IP_TOS_OFF                  1             ;
@@ -1927,34 +1929,34 @@ IP_TOS_OFF                  1             ;
 // IPV4 L23 size 7 
 
 
-#define CMP_BDOS_L23_IPV6_HOP_LIMIT_OFF        (2 + UNF_BDOS_L3_KEY_OFFSET )  // Size 1 byte
-#define CMP_BDOS_L23_IPV6_TRAFFIC_CLASS_OFF    (3 + UNF_BDOS_L3_KEY_OFFSET )  // Size 1 byte
-#define CMP_BDOS_L23_IPV6_FLOW_LABEL_OFF       (4 + UNF_BDOS_L3_KEY_OFFSET )  // Size 4 bytes
-#define CMP_BDOS_L23_IPV6_FRGMNT_OFF           (8 + UNF_BDOS_L3_KEY_OFFSET )  // Size 2 bytes
-#define CMP_BDOS_L23_IPV6_FRGMNT_FLG_OFF       (10 + UNF_BDOS_L3_KEY_OFFSET )  // Size 1 byte
-#define CMP_BDOS_L23_IPV6_FRGMNT_ID_OFF        (11 + UNF_BDOS_L3_KEY_OFFSET )  // Size 4 bytes
-//Ipv6 L32 size 15 byte
+#define CMP_BDOS_L23_IPV6_HOP_LIMIT_OFF        (2 + UNF_BDOS_L3_KEY_OFFSET )  //  62  Size 1 byte
+#define CMP_BDOS_L23_IPV6_TRAFFIC_CLASS_OFF    (3 + UNF_BDOS_L3_KEY_OFFSET )  //  63 Size 1 byte
+#define CMP_BDOS_L23_IPV6_FLOW_LABEL_OFF       (4 + UNF_BDOS_L3_KEY_OFFSET )  //  64 Size 4 bytes
+#define CMP_BDOS_L23_IPV6_FRGMNT_OFF           (8 + UNF_BDOS_L3_KEY_OFFSET )  //  68 Size 2 bytes
+#define CMP_BDOS_L23_IPV6_FRGMNT_FLG_OFF       (10 + UNF_BDOS_L3_KEY_OFFSET )  // 70 Size 1 byte
+#define CMP_BDOS_L23_IPV6_FRGMNT_ID_OFF        (11 + UNF_BDOS_L3_KEY_OFFSET )  // 71 Size 4 bytes
+//Ipv6 L32 size 15 byte  end 78
 
-#define UNF_BDOS_L4_KEY_OFFSET   (CMP_BDOS_L23_IPV6_FRGMNT_ID_OFF + 4)
+#define UNF_BDOS_L4_KEY_OFFSET   (CMP_BDOS_L23_IPV6_FRGMNT_ID_OFF + 4) // 78
 
-#define CMP_BDOS_L4_CHECKSUM_OFF       ( 0 + UNF_BDOS_L4_KEY_OFFSET )  // Size 2 bytes
-#define CMP_BDOS_L4_ICMP_TYPE_OFF      ( 2 + UNF_BDOS_L4_KEY_OFFSET )   // Size 1 byte, ICMP Fields
-#define CMP_BDOS_L4_IGMP_TYPE_OFF      ( 3 + UNF_BDOS_L4_KEY_OFFSET )   // Size 1 byte, IGMP Fields
-#define CMP_BDOS_L4_TCP_SEQ_NUM_OFF    ( 4 + UNF_BDOS_L4_KEY_OFFSET )   // Size 4 bytes, TCP Fields
-#define CMP_BDOS_L4_TCP_FLAGS_OFF      ( 8 + UNF_BDOS_L4_KEY_OFFSET )  // Size 1 byte,  TCP Fields
+#define CMP_BDOS_L4_CHECKSUM_OFF       ( 0 + UNF_BDOS_L4_KEY_OFFSET )  //  75 Size 2 bytes
+#define CMP_BDOS_L4_ICMP_TYPE_OFF      ( 2 + UNF_BDOS_L4_KEY_OFFSET )   // 77 Size 1 byte, ICMP Fields
+#define CMP_BDOS_L4_IGMP_TYPE_OFF      ( 3 + UNF_BDOS_L4_KEY_OFFSET )   // 78 Size 1 byte, IGMP Fields
+#define CMP_BDOS_L4_TCP_SEQ_NUM_OFF    ( 4 + UNF_BDOS_L4_KEY_OFFSET )   // 79 Size 4 bytes, TCP Fields
+#define CMP_BDOS_L4_TCP_FLAGS_OFF      ( 8 + UNF_BDOS_L4_KEY_OFFSET )  //  83 Size 1 byte,  TCP Fields
 // L2 fields offsets
-#define CMP_BDOS_L23_VLAN_OFF          (UNF_PROT_VLAN_OFF + L4_KEY_OFFSET )  // Size 2 bytes
-#define CMP_BDOS_L23_PACKET_SIZE_OFF   ( 9 + UNF_BDOS_L4_KEY_OFFSET )  // Size 2 bytes
+#define CMP_BDOS_L23_VLAN_OFF          (UNF_PROT_VLAN_OFF + L4_KEY_OFFSET )  // 84 Size 2 bytes
+#define CMP_BDOS_L23_PACKET_SIZE_OFF   ( 9 + UNF_BDOS_L4_KEY_OFFSET )  // 86 Size 2 bytes
 // DNS numeric fields offsets
-#define  CMP_BDOS_L4_CNTRL_OFF         ( 11 + UNF_BDOS_L4_KEY_OFFSET )  // Size 4 bytes metadata will be replaced in TS
+#define  CMP_BDOS_L4_CNTRL_OFF         ( 11 + UNF_BDOS_L4_KEY_OFFSET )  // 88 Size 4 bytes metadata will be replaced in TS
 
 //15 bytes
 
-#define  UNF_L4_PROT   ( 15 + UNF_BDOS_L4_KEY_OFFSET ) //1 byte
+#define  UNF_L4_PROT   ( 15 + UNF_BDOS_L4_KEY_OFFSET ) // 89 byte
 //2 byte for protocols
 
-#define UNF_VIF_OFF   ( 16 + UNF_BDOS_L4_KEY_OFFSET ) // size 1
-
+#define UNF_VIF_OFF   ( 16 + UNF_BDOS_L4_KEY_OFFSET ) //  90 size 1
+//#define UNF_HASH_CORE_OFF   ( 17 + UNF_BDOS_L4_KEY_OFFSET ) //  91 size 2
 
 
 #define CMP_BDOS_L23_IPV4_KMEM_SIZE      48  // 47 bytes padded to the closest multiple of 16 bytes
