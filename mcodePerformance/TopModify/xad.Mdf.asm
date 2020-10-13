@@ -481,7 +481,7 @@ AddTMHeaderToHostOutPort;
 
 L_MDF_SEND_FRAME:
 
-jmp DISCARD_LAB , NO_NOP;
+//jmp DISCARD_LAB , NO_NOP;
 // Send the frame and finish the program
 
 

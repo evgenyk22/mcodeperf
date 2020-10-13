@@ -54,20 +54,37 @@ jmp ERROR_HANDLING_RSV, NOP_2;  // This should never happen
 
 PUBLIC FRAME_BYPASS_NETWORK_LAB:
 FRAME_BYPASS_NETWORK_TRANSPARENT_LAB:
+PutKey   0( HW_OBS ) , 0xF3 , 1;
+Putkey   MSG_VIF_OFF(HW_OBS) , UREG[6].byte[2] ,  1;
+copy 64( HW_OBS ),  0(FFT_VID_STR), 32;
+Putkey   MSG_HASH_CORE_OFF(HW_OBS), UREG[6].byte[3] ,  1;
+PutKey   MSG_L3_USR_OFF(HW_OBS) , UREG[4] , 4; 
+
+
+
+
+MovBits byGlobalStatusBitsReg.bit[SRC_100G_BIT] , byCtrlMsgPrs2Rsv2.BIT[MSG_CTRL_TOPPRS_2_IS_CAUI_PORT_BIT] , 1;
+PutKey  MSG_ACTION_ENC_OFF(HW_OBS), FRAME_BYPASS_NETWORK , 1;
 
 //reset rtpc if jumbo set
 //Mov2Bits byTempCondByte3.bits[2,2] , byCtrlMsgPrs0.bits[ ~MSG_CTRL_TOPPRS_0_JUMBO_STATUS_BIT,~MSG_CTRL_TOPPRS_0_JUMBO_STATUS_BIT]; 
 
 //nop;
 //RTPC is set
-If (!RTPC_IS_ENABLED_BIT) jmp SEND_PACKET_LAB, SEND_PACKET_LAB_CPU , NO_NOP;
+//do I really need it?   
+MovBits byGlobalStatusBitsReg.bit[RTM_RECIVE_DROP_IND_BIT], 1, 1;  
+Mov PC_STACK, FRAME_BYPASS_NETWORK_TRANSPARENT_CONT , 2;
+
+If (!RTPC_IS_ENABLED_BIT) jmp rtmCountersUpdate_LAB , SEND_PACKET_LAB_CPU , NO_NOP;
     MovBits byCtrlMsgRsv0.bit[MSG_CTRL_TOPRSV_0_RTM_GLOB_BYPASS_BIT], 1, 1;   
     //Mov byFrameActionReg, FRAME_BYPASS_NETWORK, 1;
-    PutKey  MSG_ACTION_ENC_OFF(HW_OBS), FRAME_BYPASS_NETWORK , 1;
+    copy 8( HW_OBS ),  8(MSG_STR), 16; 
   
 FRAME_BYPASS_NETWORK_TRANSPARENT_CONT: 
 
 
+halt UNIC,
+     HW_MSG_HDR;
 
 
 
@@ -84,12 +101,30 @@ FRAME_BYPASS_HOST_LAB:
 FRAME_BYPASS_HOST_LAB_GLOB_MODE:      
 
 
-jmp SEND_PACKET_LAB_CPU, NOP_2;
+PutHdr HREG[ 0 ], RSV_MSG_HDR;
+
+copy 64( HW_OBS ),  0(FFT_VID_STR), 32;
+
+
+PutKey   0( HW_OBS ) , 0xF3 , 1;
+Putkey   MSG_VIF_OFF(HW_OBS) , UREG[6].byte[2] ,  1;
+Putkey   MSG_HASH_CORE_OFF(HW_OBS), UREG[6].byte[3] ,  1;
+PutKey  MSG_ACTION_ENC_OFF(HW_OBS), FRAME_BYPASS_HOST , 1;
+Mov byCtrlMsgRsv0 , byCtrlMsgPrs0 , 1;
+nop;
+copy 8( HW_OBS ),  8(MSG_STR), 16;
+nop;
+nop;
+nop;
+halt UNIC,
+     HW_MSG_HDR;
+
+//jmp SEND_PACKET_LAB_CPU, NOP_2;
 //   PutKey  MSG_ACTION_ENC_OFF(HW_OBS), FRAME_BYPASS_HOST , 1;
 //   nop;
 
 
-if (!byCtrlMsgPrs0.bit[MSG_CTRL_TOPPRS_0_ANALYZE_POLICY_BIT]) jmp FRAME_BYPASS_HOST_LAB_GLOB_MODE, NOP_2;
+//if (!byCtrlMsgPrs0.bit[MSG_CTRL_TOPPRS_0_ANALYZE_POLICY_BIT]) jmp FRAME_BYPASS_HOST_LAB_GLOB_MODE, NOP_2;
 
 
 PUBLIC CONT_LAB:

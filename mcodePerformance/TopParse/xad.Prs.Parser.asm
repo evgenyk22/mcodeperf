@@ -1941,8 +1941,17 @@ indirect PA_NET_BYPASS:
    And ALU,STAT_RESULT_L, 1<<RED_FLAG_OFF, 1;// ALU.bit[1] = 0 if sample, 1 otherwise
    Nop;
 
-   //jnz CHECK_TP_CONDITIONS_LAB, NOP_2; // No sampling in case of RED color (i.e. drop\bypass), or in case of cont
+   jz SAMPLE, NOP_2; // No sampling in case of RED color (i.e. drop\bypass), or in case of cont
+   // Count dropped or bypassed packets and continue with drop handling
+   EZstatIncrByOneIndexReg uqTmpReg4;
+   
+   Jmul PRS_DONE_LAB,   // in case of trace, cont. in order to perform the trace, even if the action is DROP
+     CONF_NETWORK_BYPASS_LAB,       //BYPASS
+     GLOB_CONF_DROP_LAB,NO_NOP; //DROP
+     Nop;
+     Nop;
 
+SAMPLE:
    //we get here if RED==0 (sample) and action is drop or bypass
    // Sample packet to CPU (50 packets per second)
 

@@ -274,8 +274,14 @@ FRAME_FROM_NW_CAUI_LAB:
    
    If (!FLAGS.BIT[ F_ZR ])  MovBits byCtrlMsgPrs1.bit[MSG_CTRL_TOPPRS_1_RT_EN_BIT], 1, 1; 
    //Mov byVifPortReg , PORT_DATA0, 1;
-   Mov ALU,0,4; 
-   Mov4Bits ALU.bits[4,3,2,1] , uqGcCtrlReg0.bits[GC_CNTRL_0_ALIST_NONE_EMPTY_BIT,GC_CNTRL_0_POLICY_NON_EMPTY_BIT,GC_CNTRL_0_PROT_DST_NONE_EMPTY_BIT,GC_CNTRL_0_BDOS_EMPTY_SIG_BIT];
+   
+   jmul SKIP,                    // CONTINUE: Perform packet parsing (action: FRAME_CONT_ACTION)
+     GLOB_CONF_DROP_LAB,         // DROP:     Increment RT counter and discard frame     
+     GLOB_CONF_NETWORK_BYPASS_LAB,NO_NOP;  // BYPASS:   Send from Network port to Network port (action: FRAME_BYPASS_NETWORK). This will send to NW after running the parser, which assures that the routing key will be built (in case of routing mode). 
+         Mov4Bits ALU.bits[4,3,2,1] , uqGcCtrlReg0.bits[GC_CNTRL_0_ALIST_NONE_EMPTY_BIT,GC_CNTRL_0_POLICY_NON_EMPTY_BIT,GC_CNTRL_0_PROT_DST_NONE_EMPTY_BIT,GC_CNTRL_0_BDOS_EMPTY_SIG_BIT];
+   
+SKIP:
+   Mov ALU,0,4;
    PutHdr  HREG[ 1 ], MAIN_LKP;
    Mov2Bits ALU.bits[6,5] , uqGcCtrlReg0.bits[ ~GC_CNTRL_0_ROUTING_ENABLED_BIT , GC_CNTRL_0_ROUTING_ENABLED_BIT];
    //PutKey UNF_VIF_OFF(COM_KBS), PORT_DATA0, 1; 
@@ -382,8 +388,28 @@ CONF_NETWORK_BYPASS_LAB: // This label is used to handle the Feature BYPASS
 
 // Increment number of external packets by-passed on TOP Parse by Global traffic processing mode  
 // STAT_OPERATION GS_TPR_EX_PAS, 1, EZ_INCR_CMD_STS;
-jmp PRS_DONE_LAB, NOP_1;
-   Mov byFrameActionReg, FRAME_BYPASS_NETWORK, 1;
+Mov FMEM_BASE , 0 , 4;
+Mov  R_PC , FRAME_BYPASS_NETWORK_LAB , 4;
+Mov uqTmpReg4 , TX_VLAN_BASE , 2;
+Get ALU , ETH_VID1_OFF(FMEM_BASE), 2, SWAP , RESET;
+
+//convert to vif
+Sub ALU , ALU , uqTmpReg4 /*TX_VLAN_BASE*/ , 2;
+Mov2Bits ALU.byte[2].bits[6,5] , uqGcCtrlReg0.bits[ ~GC_CNTRL_0_ROUTING_ENABLED_BIT , GC_CNTRL_0_ROUTING_ENABLED_BIT]; 
+MovBits byCtrlMsgPrs0.bit[MSG_CTRL_TOPPRS_0_GLOB_DESC_BIT], 1, 1;
+PutKey 0(COM_KBS) ,  ALU, 3;
+PutHdr  HREG[ 1 ], HOST_LKP;
+Mov byFrameActionReg, FRAME_BYPASS_NETWORK, 1;
+
+//   PutHdr  HREG[ 1 ], 0; // Don't go through TOPsearch in this case
+Halt UNIC,HW_MSG_HDR , 
+		  ST_UREG_0_7 CTX_LINE_TOPS,  // Save UREGs 0_7 to context memory
+		  LD_UREG_0_7 CTX_LINE_TOPS,  // Load UREGs 0_7 from context memory in TOPresolve
+		  LD_PC_UREG_7;               // Start next TOP program execution at LAB from UREG[7]
+
+
+
+
 
 // Increment specific counter for host/net drop
 GLOB_CONF_DROP_HOST_LAB:
