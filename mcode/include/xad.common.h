@@ -1411,7 +1411,7 @@
 
 //mask all except bits 0-5
 //set pa enable def action continue
-#define PA_CHECK_ONLY     (  (1<<GC_CNTRL_0_SYN_DEFAULT_ACTION_BITS) | (1 << GC_CNTRL_0_VLAN_TUN_CFG_BIT ) | (1<<GC_CNTRL_0_IMMCHK_ENABLED_BIT ) | ( 1<< GC_CNTRL_0_IMMCHK_DEFAULT_ACTION_BIT) | ( 3));
+#define PA_CHECK_ONLY     (  (1 << GC_CNTRL_0_VLAN_TUN_CFG_BIT ) | (1<<GC_CNTRL_0_IMMCHK_ENABLED_BIT ) | ( 1<< GC_CNTRL_0_IMMCHK_DEFAULT_ACTION_BIT) | ( 3));
 
 #define GC_CNTRL_0_FRAME_ACTION_BITS_OFFSET        0
 // The existing code of TOPparse will jump in frame_from_network flow as follows:
@@ -1437,7 +1437,7 @@
 
 // The following 2 bits must remain together:
 //#define GC_CNTRL_0_ALIST_DEFAULT_ACTION_BITS       8  // not supported more since continue action
-#define GC_CNTRL_0_POL_CTRL_ACTIVE_BIT             8  // Policy configuration phase 1 bit
+#define GC_CNTRL_0_POL_CTRL_ACTIVE_BIT             16  // Policy configuration phase 1 bit
 #define GC_CNTRL_0_TIN_LIN                         9  // Bit 9 used different way . It will be set if packet should go to DNS mitigation
 //in latter stage this bit will be reused as combination of TUNEL_DEDECTED and TUNEL_DISABLE status in parse
 #define GC_CNTRL_0_TUN_DET_DIS                     9
@@ -1449,7 +1449,7 @@
 #define GC_CNTRL_0_MPLS_TUN_CFG_BIT                14 //                    - to enable deeper packet inspection in case that frame has MPLS header
 
 // The following 2 bits must remain together:
-#define GC_CNTRL_0_SYN_DEFAULT_ACTION_BITS         15
+//#define GC_CNTRL_0_SYN_DEFAULT_ACTION_BITS         15
 #define GC_CNTRL_0_PROT_DST_NONE_EMPTY_BIT         17
 
 #define GC_CNTRL_0_PROT_DST_PHASE_BIT              18 // SYN Protection phase bit ('0' - phase 0, '1' - phase 1)
@@ -1918,7 +1918,10 @@ IP_TOS_OFF                  1             ;
 // L3 fields sizes for IPV4:
 #define CMP_BDOS_L23_SIP_SIZE          16
 #define CMP_BDOS_L23_DIP_SIZE          16
-
+/*
+#define CMP_BDOS_L23_IPV6_SIP_SIZE          16
+#define CMP_BDOS_L23_IPV6_DIP_SIZE          16
+*/
 #define CMP_BDOS_L23_ID_NUM_SIZE       2
 #define CMP_BDOS_L23_TOS_SIZE          1
 #define CMP_BDOS_L23_TTL_SIZE          1
@@ -1931,7 +1934,7 @@ IP_TOS_OFF                  1             ;
 
 #define CMP_BDOS_L23_IPV6_HOP_LIMIT_OFF        (2 + UNF_BDOS_L3_KEY_OFFSET )  //  62  Size 1 byte
 #define CMP_BDOS_L23_IPV6_TRAFFIC_CLASS_OFF    (3 + UNF_BDOS_L3_KEY_OFFSET )  //  63 Size 1 byte
-#define CMP_BDOS_L23_IPV6_FLOW_LABEL_OFF       (4 + UNF_BDOS_L3_KEY_OFFSET )  //  64 Size 4 bytes
+#define CMP_BDOS_L23_IPV6_FLOW_LABEL_OFF       (4 + UNF_BDOS_L3_KEY_OFFSET )  //  64 Size 4 bytes -- wrong , this 63 
 #define CMP_BDOS_L23_IPV6_FRGMNT_OFF           (8 + UNF_BDOS_L3_KEY_OFFSET )  //  68 Size 2 bytes
 #define CMP_BDOS_L23_IPV6_FRGMNT_FLG_OFF       (10 + UNF_BDOS_L3_KEY_OFFSET )  // 70 Size 1 byte
 #define CMP_BDOS_L23_IPV6_FRGMNT_ID_OFF        (11 + UNF_BDOS_L3_KEY_OFFSET )  // 71 Size 4 bytes

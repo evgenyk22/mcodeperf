@@ -336,7 +336,7 @@ halt;
 POLICY:
 WriteCond COND_REG, TREG[UNF_PROT_POLICY_PHASE_OFF].bit[4], SET_MATCH_BIT;   
 JCond;                    
-JMatch POLICYP1;
+JNoMatch POLICYP1;
 
 //WriteIndreg POLICY_RES_CONF_STR_P0 ;
 
@@ -366,7 +366,7 @@ Lookup TREG[ TREG_TCAM_RESULT_OFF  ], POLICY_RES_STR,
        TREG[ TREG_TCAM_IDX_UNF_OFF ], 0,
        NO_WR_LAST;  
 
-MovBits TREG[UNF_PROT_POLICY_PHASE_OFF].bit[4] , TREG[UNF_PROT_POLICY_PHASE_OFF].bit[6] , 1;
+MovBits TREG[UNF_PROT_POLICY_PHASE_OFF].bit[4] , TREG[UNF_PROT_POLICY_PHASE_OFF].bit[0] , 1;
 WriteCond COND_REG, TREG[UNF_PROT_POLICY_PHASE_OFF].bit[4], SET_MATCH_BIT;   
 JCond;                    
 JMatch POLICYP1_CONF;
@@ -607,17 +607,22 @@ BDOS_CNFG:
 
 OTHER_L4_PROTO_BDOS: //also fallback 
 
-
+   //Attack_L4_Other_Treat;
+   Write OREG, BDOS_ATTACK_RESULTS_L4_STR, TREG[TREG_BDOS_RES_OFF], BDOS_ATTACK_RESULT_SIZE, NO_WR_LAST;
+   jcond;
+   jmp BDOS_L3_START; 
 
 IGMP_BDOS:
-    jcond;
-    jmp MAIN;
+   Attack_IGMP_Treat;
+   //Write OREG, BDOS_ATTACK_RESULTS_L4_STR, TREG[TREG_BDOS_RES_OFF], BDOS_ATTACK_RESULT_SIZE, NO_WR_LAST; 
+   //jcond;
+   //jmp BDOS_L3_START;
 
 
 ICMP_BDOS:
-
-    jcond;
-    jmp MAIN;
+     Attack_ICMP_Treat; 
+    //jcond;
+    //jmp MAIN;
 
 
 TCP_BDOS:    
@@ -634,9 +639,7 @@ TCP_BDOS:
 
 UDP_BDOS:
 
-    jcond;
-    jmp MAIN;
-
+    Attack_UDP_Treat; 
 
 BDOS_L3_START:
 
@@ -662,7 +665,7 @@ Attack_IPV4_Treat;
 
 
 BDOS_IPV6:
-//Attack_IPV6_Treat;
+Attack_IPV6_Treat;
 
 jcond;
 jmp MAIN;

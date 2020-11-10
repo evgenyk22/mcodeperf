@@ -111,6 +111,8 @@ If (!Z ) MovBits byCtrlMsgPrs1.BIT[MSG_CTRL_TOPPRS_1_USER_VLAN_IN_FRAME_BIT], sH
 //    Nop;
 //    Nop;
 jmul  CHECK_FAIL_L2 , CHECK_FAIL_L2 , CHECK_FAIL_L2 , NO_NOP;
+    Mov2Bits  uqGcCtrlReg0.bits[GC_CNTRL_0_FRAME_ACTION_DROP,GC_CNTRL_0_FRAME_ACTION_DROP],HWD_REG7.bits[sHWD_bitNoTags_off,sHWD_bitOneTag_off];
+    nop;
 //set user vlan indication for packet arriving from CAUI
     
 //jmul BPDU_MCAST , MCAST , BCAST , L2_NONE_ETH , TEST_TUNNEL_AWARE_LAB , TEST_TUNNEL_AWARE_LAB , TEST_TUNNEL_AWARE_LAB;
@@ -141,21 +143,20 @@ jmul  CHECK_FAIL_L2 , CHECK_FAIL_L2 , CHECK_FAIL_L2 , NO_NOP;
 
 TEST_TUNNEL_AWARE_LAB:
 
-// Packet from CAUI
-If (uqCondReg.BIT[sHWD_bitNoTags_off] ) Jmp L3_PROT_DECODE_LAB; // jump if No User Vlan tunel, only 1 Vlan (the internally added Switch Vlan)
-    nop;
-    nop;
+//MovBits uqGcCtrlReg0.bit[GC_CNTRL_0_FRAME_ACTION_DROP] ,  0 , 1;
 
-// Untagged frame: In case only 1 Vlan (switch Vlan) in frame, no need to check Tunnel Aware state
-If (uqCondReg.BIT[sHWD_bitOneTag_off] ) Jmp L3_PROT_DECODE_LAB, NOP_2; // jump if No User Vlan tunel, only 1 Vlan (the internally added Switch Vlan)
+// Packet from CAUI
+If ( uqGcCtrlReg0.bit[GC_CNTRL_0_FRAME_ACTION_DROP] ) Jmp L3_PROT_DECODE_LAB; // jump if No User Vlan tunel, only 1 Vlan (the internally added Switch Vlan)
+    MovBits uqGcCtrlReg0.bit[GC_CNTRL_0_FRAME_ACTION_DROP] , 0 ,1;
+    nop;
 
 // Tagged frame: There is more then 1 Vlan (Switch Vlan) in the frame (either 2/3 Vlans in the frame, i.e. 1/2 User Vlans). 
 if (bitPRS_isRoutingMode) jmp ROUTING_MODE_CHECK_VLAN_AWARE_LAB, NOP_1;
    MovBits byCtrlMsgPrs1.bit[MSG_CTRL_TOPPRS_1_USER_VLAN_IN_FRAME_BIT], 1, 1; // Prepare the routing enabled configuration to be passed via the message.
 
 // Transparent mode
-if (!uqGcCtrlReg0.bit[GC_CNTRL_0_VLAN_TUN_CFG_BIT]) Jmp CONF_NETWORK_BYPASS_LAB , NOP_2; // Jump to CONF_NETWORK_BYPASS_LAB in case that more then 1 Vlan in the frame (2 or 3 Vlans i.e. user Vlan(s) exists) and GC_CNTRL_0_VLAN_TUN_CFG_BIT is clear
-jmp L3_PROT_DECODE_LAB, NOP_2;
+if (!uqGcCtrlReg0.bit[GC_CNTRL_0_VLAN_TUN_CFG_BIT]) Jmp CONF_NETWORK_BYPASS_LAB ,L3_PROT_DECODE_LAB, NOP_2; // Jump to CONF_NETWORK_BYPASS_LAB in case that more then 1 Vlan in the frame (2 or 3 Vlans i.e. user Vlan(s) exists) and GC_CNTRL_0_VLAN_TUN_CFG_BIT is clear
+
 
 // Routing mode: Tagged frame (more then 1 Vlans in the frame) - Now check Vlan Aware mode
 ROUTING_MODE_CHECK_VLAN_AWARE_LAB:
@@ -233,9 +234,10 @@ NONE_LACP:
 // Bug fix by Guy for Build2 (Release 9): In Bypass mode the packet does not go through packet anomalies, so configure L2 packets to be sent to the host is done manually here.
 if (FLAGS.bit[F_ZR]) jmp  HOST_P0_BYPASS_LAB , NOP_2;
 
-jmp PARSING_DONE_LAB, NO_NOP; // This case does not require building a routing table key as the host will configure all such frames in routing mode either to be punted to the host or to be discarded (such frames that arrive from the network will never be routed to the network).   
-   MovBits uqInReg.BIT[L3_UNS_PROT_OFFSET], 1, 1;
-   Nop;
+
+if (!bitPRS_isRoutingMode) jmp L3_UNS_LAB_CHECK , PARSING_DONE_LAB, NO_NOP; // This case does not require building a routing table key as the host will configure all such frames in routing mode either to be punted to the host or to be discarded (such frames that arrive from the network will never be routed to the network).   
+   Mov PC_STACK, PARSING_DONE_LAB , 2;
+   Nop;             
 
 
 // If L3 == MPLS (actually acts as L2.5), make manual decoding since HW decoder does not decodes MPLS label // ##TODO_OPTIMIZE: In NP4 there is MPLS HW decoder (see Decode_mpls command). check if we want to use it instead of the manual MPLS code handler.
@@ -323,10 +325,10 @@ Jz IPv6_PROT_DECODE_LAB, NO_NOP; // if IPv6 go to IPv6 handling. this can happen
 
 // verify IPv4 for case of IP in a tunnel (probability of incorrect IPv4 identification: 1/16)
 //Mov PA_CASE , IC_CNTRL_0_L3_UNK , 2 , THROW( sIpv4ProtDec_CAMO_bitBadVer );   
- If (sIpv4ProtDec_CAMO_bitBadVer) jmp PARSING_DONE_LAB;
+ If (sIpv4ProtDec_CAMO_bitBadVer) jmp L3_UNS_LAB_CHECK;
     //set policy ipv4 mapping
     Mov  uqTmpReg6 , IPV4_IPV6_MAPPING_2ND, 4;
-    If (sIpv4ProtDec_CAMO_bitBadVer)  MovBits uqInReg.BIT[L3_UNS_PROT_OFFSET], 1, 1;
+    If (sIpv4ProtDec_CAMO_bitBadVer)  Mov PC_STACK , PARSING_DONE_LAB , 2;
 
 
    
@@ -387,6 +389,7 @@ Mov PA_CASE , IC_CNTRL_0_IPv4_INC_PKTHDRLEN , 2 , THROW( CAMO.bit[18] );
     //MovBits uqCondReg.bit[L3_CALC_SIP_DIP_HASH], 1, 1;
     //Nop;
     //PutKey MSG_HASH_2B_CORE_OFF( COM_KBS ), uxHash2BVal , 2;  // Store one byte hash and 2 bytes hash
+    //this bit will be used as indication of tunnel internal heade to avoid some checks
     nop;
     nop;
     //PutKey MSG_HASH_CORE_OFF( HW_KBS ), byHashVal, 1;  // Store one byte hash and 2 bytes hash
@@ -474,20 +477,20 @@ Mov PA_CASE , IC_CNTRL_0_INC_TTL , 2 , THROW( FLAGS.BIT[ F_ZR ]  );
     Get CAMI ,  IP_PRT_OFF ( FMEM_BASE ) , 1;
 
 TTL_CONT:
-Mov ALU , uqTmpReg9.byte[0] , 1 , RESET;
-CmpSet ALU.byte[3] , ALU , 0x007f , RESULT 1 ;
-Mov ALU , uqTmpReg9.byte[1] , 1; 
-CmpSet ALU.byte[3] , ALU , 0x007f , RESULT 1;
+//Mov ALU , uqTmpReg9.byte[0] , 1 , RESET;
+//CmpSet ALU.byte[3] , ALU , 0x007f , RESULT 1 ;
+//Mov ALU , uqTmpReg9.byte[1] , 1; 
+//CmpSet ALU.byte[3] , ALU , 0x007f , RESULT 1;
 //Nop;
 Copy  UNF_PROT_SIP_OFF(COM_KBS), IP_SIP_OFF(FMEM_BASE),4, SWAP;
-MovBits  CAMO.bit[0] , ALU.byte[3] , 1; 
-xor CTX_REG[15], ALU, !ALU, 4, IC_CNTRL_1_MREG, MASK_BOTH; // TOPparse MREG[10] 
+//MovBits  CAMO.bit[0] , ALU.byte[3] , 1; 
+//xor CTX_REG[15], ALU, !ALU, 4, IC_CNTRL_1_MREG, MASK_BOTH; // TOPparse MREG[10] 
 
-If (CAMO.bit[0]) jmp LAND_IPLOCAL_L4ZERO;
-    If (CAMO.bit[0]) Mov PA_CASE , IC_CNTRL_1_SIPDIP_LOCAL  , 2 ;
-    If (CAMO.bit[0]) Mov PC_STACK , LOCAL_CONT , 2;  
+//If (CAMO.bit[0]) jmp LAND_IPLOCAL_L4ZERO;
+//    If (CAMO.bit[0]) Mov PA_CASE , IC_CNTRL_1_SIPDIP_LOCAL  , 2 ;
+//    If (CAMO.bit[0]) Mov PC_STACK , LOCAL_CONT , 2;  
 
-LOCAL_CONT:
+//LOCAL_CONT:
 
 
 
@@ -559,36 +562,37 @@ MANUAL_L4_IPv6_PROTOCOL_DECODE_LAB:
 MANUAL_L4_PROTOCOL_DECODE_LAB:
 //Nop;
 mov byL4Proto, CAMI,1;
+xor CTX_REG[15], ALU, !ALU, 4, IC_CNTRL_1_MREG, MASK_BOTH; // TOPparse MREG[10] 
 // Detect next protocol (build bitmap according to detection of HW_DEC)
 //LookCam CAMO ,  FMEM_OFFSET1(FMEM_BASE) , BCAM8[L4_HDR_TYPES_COMBINATION_GRP] ,GET_SIZE 1 , MASK_000000FF ,0 ,WR_ENC_PRI;
 LookCam CAMO ,  CAMI , BCAM8[L4_HDR_TYPES_COMBINATION_GRP] ,WR_ENC_PRI;
 
 //reload PA checkbase 
-xor CTX_REG[15], ALU, !ALU, 4, IC_CNTRL_1_MREG, MASK_BOTH; // TOPparse MREG[10] 
 
-#define uqDip   uqTmpReg9;
+
+//#define uqDip   uqTmpReg9;
 //check landbase attack SIP==DIP
-If (sIpv4ProtDec_CAMO_bitDipEqSip) jmp LAND_IPLOCAL_L4ZERO;
-    If (sIpv4ProtDec_CAMO_bitDipEqSip) Mov PA_CASE , IC_CNTRL_1_LAND_ATTACK  , 2 ;
-    If (sIpv4ProtDec_CAMO_bitDipEqSip) Mov PC_STACK , LAND_CONT , 2;  
+//If (sIpv4ProtDec_CAMO_bitDipEqSip) jmp LAND_IPLOCAL_L4ZERO;
+//    If (sIpv4ProtDec_CAMO_bitDipEqSip) Mov PA_CASE , IC_CNTRL_1_LAND_ATTACK  , 2 ;
+//    If (sIpv4ProtDec_CAMO_bitDipEqSip) Mov PC_STACK , LAND_CONT , 2;  
 
 //continue action after land attach treat
-LAND_CONT:
+//LAND_CONT:
 
-get   uqDip, IP_DIP_OFF(FMEM_BASE), 4; //MB:2018: prepare DIP in uqTmpReg9 register for CAUI Lag Hash func calculation
+//get   uqDip, IP_DIP_OFF(FMEM_BASE), 4; //MB:2018: prepare DIP in uqTmpReg9 register for CAUI Lag Hash func calculation
 
 Mov FMEM_BASE, uqOffsetReg0.byte[L4_OFFB], 2; 
 
 MovMul L4_TCP_TYPE , L4_UDP_TYPE , L4_ICMP_TYPE , L4_SCTP_TYPE , L4_IGMP_TYPE , L4_GRE_TYPE , L4_IPinIP_TYPE;   
 MovBits uqFramePrsReg.BIT[L4_TYPE_OFF] , ENC_PRO , 3;
 
-
+nop;
 //set minimal header len  
 MovMul TCP_BASE_SIZE , UDP_BASE_SIZE , ICMP_BASE_SIZE , SCTP_BASE_SIZE , IGMP_BASE_SIZE , 0 ,0;
 MovBits uqFramePrsReg.bit[L4_MIN_LEN_OFF], ENC_PRO, 6; 
 
 //fxor  uqCauiLagHash, uqDip.BYTE[0], uqDip.BYTE[2], 2,; //MB:2018: CAUI LAG Hash func calculation
-#undef uqDip;
+//#undef uqDip;
 // L4 for bdos key 
 Copy UNF_L4_PROT(COM_KBS), IP_PRT_OFF(FMEM_BASE),  CMP_BDOS_L23_L4_PROT_SIZE;
 
@@ -759,8 +763,8 @@ If (!FLAGS.bit[F_ZR])    MovBits byCtrlMsgPrs3.bit[ROUTE_NETSTACK_BRMCAST_OFF] ,
 
           
 // Error: Incorrect version number
-If (sIpv6ProtDec_CAMO_bitBadVer) Jmp PARSING_DONE_LAB, NOP_1;  
-   If (sIpv6ProtDec_CAMO_bitBadVer) MovBits uqInReg.BIT[L3_UNS_PROT_OFFSET], 1, 1;
+If (sIpv6ProtDec_CAMO_bitBadVer) Jmp L3_UNS_LAB_CHECK, NOP_1;  
+   If (sIpv6ProtDec_CAMO_bitBadVer) Mov PC_STACK , PARSING_DONE_LAB , 2;
 
 
 // Check Scope is Link-Local
@@ -819,11 +823,11 @@ HOP_LIMIT:
 //      IPv6 Headers Check
 ///////////////////////////////////
 
-If  (sIpv6ProtDec_CAMO_bitDipEqSip) jmp LAND_IPLOCAL_L4ZERO ;
-    If (sIpv6ProtDec_CAMO_bitDipEqSip) Mov PA_CASE , IC_CNTRL_1_LAND_ATTACK  , 2 ;
-    If  (sIpv6ProtDec_CAMO_bitDipEqSip) Mov PC_STACK , IPv6_LAND_CONT , 2;
+//If  (sIpv6ProtDec_CAMO_bitDipEqSip) jmp LAND_IPLOCAL_L4ZERO ;
+//    If (sIpv6ProtDec_CAMO_bitDipEqSip) Mov PA_CASE , IC_CNTRL_1_LAND_ATTACK  , 2 ;
+//    If  (sIpv6ProtDec_CAMO_bitDipEqSip) Mov PC_STACK , IPv6_LAND_CONT , 2;
    
-IPv6_LAND_CONT:
+//IPv6_LAND_CONT:
 
 // Return FMEM_BASE on next header start
 Add FMEM_BASE, FMEM_BASE, IPv6_BASE_SIZE, 2;
@@ -848,8 +852,17 @@ MovBits ENC_PRI.bit[9], sIpv6ProtDec_CAMO_bitNextIsTcp, 7;
 
 Add uxTmpReg2, uqOffsetReg0.byte[L3_OFFB], IPv6_BASE_SIZE, 2; // uxTmpReg2 - represents L3 header size and will be calculated
 Mov bytmp, 10, 1; // bytmp1 will count the number of extension headers, allowing 10 max.
+
             
 GET_NEXT_HDR_LAB:
+
+
+
+LookCam CAMO ,  CAMI , BCAM8[L4_HDR_TYPES_COMBINATION_GRP];
+nop;
+if (FLAGS.BIT[ F_MH ]) jmp MANUAL_L4_IPv6_PROTOCOL_DECODE_LAB;
+    if (FLAGS.BIT[ F_MH ]) Mov uqOffsetReg0.byte[L4_OFFB], uxTmpReg2, 2;
+    nop;
 
 // Parsing of ipv6 subheaders
 
@@ -861,21 +874,30 @@ LookCam CAMO, CAMI, BCAM32[IPv6_SUBHEAD_ID_GRP]  ;
    //MovBits CAMO.bit[sIpv4ProtDec_CAMO_bitDipEqSip] ,  CAMO.bit[sIpv6ProtDec_CAMO_bitDipEqSip]  , 1;
    Nop;
 
+   
+   if (FLAGS.BIT[ F_CY|F_ZR ] ) Mov bytmp2, L4_UNS_TYPE, 1;                          // set L4 Type to be unsupported (in case the jump is taken)
+   Mov PA_CASE , IC_CNTRL_0_IPv4_INC_PKTHDRLEN , 2 , THROW( FLAGS.BIT[ F_CY|F_ZR ] );   
+   
+   nop;
+   //MovBits uqInReg.BIT[IPv6_FRAMELEN_ERR_OFFSET], 1, 1; // set PA107 (IPV6_INCONSIST_HDR) in case the jump is taken
+
 //in case of  next header is L4 reset FMEM_BASE to L3 start
+//#endif 
 
 
-if (!FLAGS.BIT[ F_MH ]) jmp MANUAL_L4_IPv6_PROTOCOL_DECODE_LAB, NO_NOP;
+
+if (!FLAGS.BIT[ F_MH ]) jmp L3_IPv6_SUB_HLEN_LAB, NO_NOP; 
    MovBits ENC_PRI.bit[13], CAMO.bit[0], 3;
    if (!FLAGS.BIT[ F_MH ]) Mov uqOffsetReg0.byte[L4_OFFB], uxTmpReg2, 2; // Store calculated L3 header size 
 
-JBE MANUAL_L4_IPv6_PROTOCOL_DECODE_LAB, NO_NOP;
-   Mov bytmp2, L4_UNS_TYPE, 1;                          // set L4 Type to be unsupported (in case the jump is taken)
-   MovBits uqInReg.BIT[IPv6_FRAMELEN_ERR_OFFSET], 1, 1; // set PA107 (IPV6_INCONSIST_HDR) in case the jump is taken
+
+
+
 
 Get bytmp2, IPv6_EXTENSION_NEXT_HEADER_OFF(FMEM_BASE), 1;
 Get bytmp3, IPv6_EXTENSION_HEADER_LENGTH_OFF(FMEM_BASE), 1;
 
-MovBits uqInReg.BIT[IPv6_FRAMELEN_ERR_OFFSET], 0, 1; // unset PA107 (IPV6_INCONSIST_HDR) in case the jump was not taken
+//MovBits uqInReg.BIT[IPv6_FRAMELEN_ERR_OFFSET], 0, 1; // unset PA107 (IPV6_INCONSIST_HDR) in case the jump was not taken
 
 if (FLAGS.bit[F_ED]) jmp GET_NEXT_HDR_ERROR_LAB, NO_NOP;
    Mov uxTmpReg1, 0, 2;
@@ -903,8 +925,12 @@ Sub ALU, FMEM_BASE, HWD_REG0.byte[2], 2;
 //check Ipv6 extension header lenght 
 jbe IPv6_EXT_HDR_OK, NOP_2;
 
+Mov PC_STACK, PARSING_DONE_LAB , 2;
+
+//jmp L3_IPv6_SUB_HLEN_LAB , NO_NOP;	
+
 //header len greather than packet size
-jmp PARSING_DONE_LAB, NO_NOP;
+jmp L3_IPv6_SUB_HLEN_LAB , NO_NOP;
    MovBits uqFramePrsReg.BIT[L4_TYPE_OFF], L4_UNS_TYPE, 3;
    MovBits uqInReg.BIT[IPv6_FRAMELEN_ERR_OFFSET], 1, 1;
 
@@ -982,7 +1008,7 @@ nop;
 nop;
 Mov PC_STACK, uqTmpReg5, 2;
 
-jmp PARSING_DONE_LAB, NO_NOP;	
+jmp L3_IPv6_SUB_HLEN_LAB , NO_NOP;	
    MovBits uqInReg.BIT[IPv6_FRAMELEN_ERR_OFFSET], 1, 1; 
    Add FMEM_BASE, FMEM_BASE, uqOffsetReg0.byte[L3_OFFB], 2; // Restore pointer to L3, (clearing bits 8-15)
 
@@ -1007,13 +1033,13 @@ UDP_DECODE_LAB:
 Get CAMI , UDP_SPRT_OFF(FMEM_BASE) , 4,SWAP;
 LookCam CAMO, CAMI, TCAM64[L7_PROT_GRP], KEY_SIZE 4 ,WR_ENC_PRI;
 Mov ALU , CAMI , 2 , RESET;
-CmpSet ALU.byte[3] , ALU , 0 , RESULT 0x1;
+//CmpSet ALU.byte[3] , ALU , 0 , RESULT 0x1;
 Get uqTmpReg1, UDP_HLEN_OFF(FMEM_BASE), 2, SWAP;
-Mov ALU , CAMI.byte[2] , 2;
+//Mov ALU , CAMI.byte[2] , 2;
 MovBits FLAGS.bit[F_ED], 0, 1;
-CmpSet ALU.byte[3] , ALU , 0 , RESULT 0x1;
-Nop;
-MovBits byTempCondByte1.byte[0] , ALU.byte[3] , 1;
+//CmpSet ALU.byte[3] , ALU , 0 , RESULT 0x1;
+//Nop;
+//MovBits byTempCondByte1.byte[0] , ALU.byte[3] , 1;
 
 Sub  ALU , uqTmpReg1 , 8 , 2 ;
  Copy CMP_BDOS_L4_CHECKSUM_OFF(COM_KBS), UDP_CHK_OFF(FMEM_BASE),   CMP_BDOS_L4_CHECKSUM_SIZE, SWAP;
@@ -1035,11 +1061,11 @@ Mov PA_CASE , IC_CNTRL_1_UDP_INC_HLEN , 2 , THROW( FLAGS.BIT[F_SN]  );
 //HLEN action continue
 UDP_INC_HLEN:
 
-If ( byTempCondByte1.bit[0]) jmp LAND_IPLOCAL_L4ZERO;
-    If (byTempCondByte1.bit[0]) Mov PA_CASE , IC_CNTRL_1_L4ZERO  , 2 ;
-    If (byTempCondByte1.bit[0]) Mov PC_STACK , UDP_L4_ZERO , 2;  
+//If ( byTempCondByte1.bit[0]) jmp LAND_IPLOCAL_L4ZERO;
+//    If (byTempCondByte1.bit[0]) Mov PA_CASE , IC_CNTRL_1_L4ZERO  , 2 ;
+//    If (byTempCondByte1.bit[0]) Mov PC_STACK , UDP_L4_ZERO , 2;  
 
-UDP_L4_ZERO:
+//UDP_L4_ZERO:
 Sub ALU , uqTmpReg1 , 0  , 2;
 
 //preliminary build BDOS L4 key ( could be used as Access list key in case of none tunnel packet ) 
@@ -1186,24 +1212,24 @@ SKIP_TCP_HLEN_DET:
 
 Copy CMP_BDOS_L4_CHECKSUM_OFF(COM_KBS), TCP_CHK_OFF(FMEM_BASE),   CMP_BDOS_L4_CHECKSUM_SIZE, SWAP;
 TCP_HLEN_CONT:
-Mov ALU , HWD_REG4 , 2;
+//Mov ALU , HWD_REG4 , 2;
 //Copy CMP_BDOS_L4_SRC_PORT_OFF(COM_KBS), UDP_SPRT_OFF(FMEM_BASE),  CMP_BDOS_L4_SRC_PORT_SIZE, SWAP;
-CmpSet ALU.byte[3] , ALU , 0 , RESULT 1 ;
+//CmpSet ALU.byte[3] , ALU , 0 , RESULT 1 ;
 //Copy CMP_BDOS_L4_DST_PORT_OFF(COM_KBS), UDP_DPRT_OFF(FMEM_BASE),  CMP_BDOS_L4_DST_PORT_SIZE, SWAP;
-Mov ALU , HWD_REG4.byte[2] , 2; 
-CmpSet ALU.byte[3] , ALU , 0 ,  RESULT 1;
-nop;
+//Mov ALU , HWD_REG4.byte[2] , 2; 
+//CmpSet ALU.byte[3] , ALU , 0 ,  RESULT 1;
+//nop;
 //PutHdr  HREG[ 1 ], COMP_SYN_PROT_LKP; // Only in TCP packet: perform syn prot search. 
 
-MovBits CAMO.byte[0] , ALU.byte[3] , 1;
+//MovBits CAMO.byte[0] , ALU.byte[3] , 1;
 
 //save dns offset (  tcp also include len offset ( 2bytes in start )
 Add uxTmp2CtxReg2 ,  HWD_REG5 , 2 , 2 ; 
-If (CAMO.bit[0]) jmp LAND_IPLOCAL_L4ZERO; 
-    If (CAMO.bit[0]) Mov PA_CASE , IC_CNTRL_1_L4ZERO  , 2 ;
-    If (CAMO.bit[0]) Mov PC_STACK , TCP_L4_ZERO , 2;  
+//If (CAMO.bit[0]) jmp LAND_IPLOCAL_L4ZERO; 
+//    If (CAMO.bit[0]) Mov PA_CASE , IC_CNTRL_1_L4ZERO  , 2 ;
+//    If (CAMO.bit[0]) Mov PC_STACK , TCP_L4_ZERO , 2;  
 
-TCP_L4_ZERO:
+//TCP_L4_ZERO:
 //camo from last lookam  loaded with DNS, L2TP_DET_LAB , GTP_CHECK_LAB bitmask
 If ( !CAMO.bit[13] ) jmp   L4_PAYLOAD_LEN_CHECK_LAB;
     //If (CAMO.bit[15]) MovBits uqGcCtrlReg0.bit[ GC_CNTRL_0_DNS_L4_PORT_DET ] , 1 , 1 ;
@@ -1229,20 +1255,20 @@ SCTP_DECODE_LAB:
 
 
 //Mov ALU , HWD_REG4 , 2;
-Get ALU , 0(FMEM_BASE) , 2,SWAP , RESET;
-CmpSet ALU.byte[3] , ALU , 0 , RESULT 1 ;
-Get ALU , 2(FMEM_BASE) , 2 , SWAP;
-CmpSet ALU.byte[3] , ALU , 0 ,  RESULT 1;
-Nop;
-MovBits CAMO.byte[0] , ALU.byte[3] , 1;
+//Get ALU , 0(FMEM_BASE) , 2,SWAP , RESET;
+//CmpSet ALU.byte[3] , ALU , 0 , RESULT 1 ;
+//Get ALU , 2(FMEM_BASE) , 2 , SWAP;
+//CmpSet ALU.byte[3] , ALU , 0 ,  RESULT 1;
+//Nop;
+//MovBits CAMO.byte[0] , ALU.byte[3] , 1;
 
 //save dns offset (  tcp also include len offset ( 2bytes in start )
-Nop;
-If (CAMO.bit[0]) jmp LAND_IPLOCAL_L4ZERO; 
-    If (CAMO.bit[0]) Mov PA_CASE , IC_CNTRL_1_L4ZERO  , 2 ;
-    If (CAMO.bit[0]) Mov PC_STACK , SCTP_L4_ZERO , 2;  
+//Nop;
+//If (CAMO.bit[0]) jmp LAND_IPLOCAL_L4ZERO; 
+//    If (CAMO.bit[0]) Mov PA_CASE , IC_CNTRL_1_L4ZERO  , 2 ;
+//    If (CAMO.bit[0]) Mov PC_STACK , SCTP_L4_ZERO , 2;  
 
-SCTP_L4_ZERO:
+//SCTP_L4_ZERO:
 
 Add ALU, uqOffsetReg0.byte[L4_OFFB], SCTP_BASE_SIZE, 2;
 Sub ALU, ALU, HWD_REG0.byte[2], 2;
@@ -1424,8 +1450,8 @@ LookCam CAMO, CAMI, BCAM16[GRE_FLAG_HDR_SIZE_GRP];    // Get extension header fi
    And     ALU, bytmp, 0x3, 1;                        // Check if one of IPv4\IPv6\PPP protocol IDs are included in GRE header
       Nop;
                                                       // ##AMIT_GUY: why checking for IPv4/ipv6 in GRE version 0 and doing diferent checks in GRE version 1?
-jz PARSING_DONE_LAB, NO_NOP;
-   if (FLAGS.bit[F_ZR]) MovBits uqInReg.BIT[L3_UNS_PROT_OFFSET], 1, 1;
+jz L3_UNS_LAB_CHECK, NO_NOP;
+   if (FLAGS.bit[F_ZR]) Mov PC_STACK , PARSING_DONE_LAB , 2;
    Nop;
 
 Mov ALU, bytmp2, 1, RESET; 
@@ -1464,7 +1490,8 @@ Loop SRE_RECORD_LOOP_LAB;
    nop;
 
 // GRE SRE number error
-jmp L4_PAYLOAD_LEN_CHECK_LAB, NOP_1;
+Mov PC_STACK , L4_PAYLOAD_LEN_CHECK_LAB , 4; 
+jmp GRE_SRE_NUM_ERROR_LAB  , NOP_1;
    MovBits uqInReg.BIT[GRE_SRE_NUM_ERR_OFFSET], 1, 1;
 
 SRE_RECORD_LOOP_END_LAB:
@@ -1498,13 +1525,16 @@ GRE_UNS_VER_LAB:
 #define GRE_TUN_UNS_DET_MASK (0xFFFFFFFF - GRE_TUN_DET_MASK);
 MovBits byCtrlMsgPrs0.bit[MSG_CTRL_TOPPRS_0_GLOB_DESC_BIT], 1, 1;    //RT monitoring will be not supported for packets GRE version error
 Mov ALU, GRE_TUN_UNS_DET_MASK, 4;
-jmp L4_PAYLOAD_LEN_CHECK_LAB, NO_NOP;
+Mov PC_STACK , L4_PAYLOAD_LEN_CHECK_LAB , 4;
+jmp GRE_UNS_VER_LAB_CHECK, NO_NOP;
    MovBits uqInReg.BIT[GRE_UNS_VER_OFFSET], 1, 1;
    And uqFramePrsReg, uqFramePrsReg, ALU, 4;
 
 // If we jump here there was a problem in GRE length calculation (FLAGS.bit[F_ED])
 GRE_HLEN_LAB:
-jmp L4_PAYLOAD_LEN_CHECK_LAB, NO_NOP;
+Mov PC_STACK , L4_PAYLOAD_LEN_CHECK_LAB , 4;
+
+jmp GRE_HLEN_ERR_LAB , NO_NOP;
    Mov PC_STACK, uqTmpReg6, 2;
    MovBits uqInReg.BIT[GRE_HLEN_ERR_OFFSET], 1, 1;
 
@@ -1565,7 +1595,9 @@ Jmul L4_PAYLOAD_LEN_CHECK_LAB,
      GTP_VER1_LAB,
      GTP_VER0_LAB;
 
-jmp L4_PAYLOAD_LEN_CHECK_LAB, NO_NOP;
+Mov PC_STACK , L4_PAYLOAD_LEN_CHECK_LAB , 4;
+
+jmp GTP_UNS_VER_LAB  , NO_NOP;
    MovBits uqInReg.BIT[GTP_UNS_VER_OFFSET], 1, 1;  
    MovBits byCtrlMsgPrs0.bit[MSG_CTRL_TOPPRS_0_GLOB_DESC_BIT], 1, 1; //RT monitoring will be not supported for packets GTP version error
 
@@ -1673,7 +1705,7 @@ Loop GTP_SUBHDR_LAB, NO_NOP;
 
 GTP_HLEN_ERR_LAB:
 
-jmp L4_PAYLOAD_LEN_CHECK_LAB, NO_NOP;
+jmp GTP_HLEN_ERR_LAB_CHECK, NO_NOP;
    Mov PC_STACK, uqTmpReg6, 2;
    MovBits uqInReg.BIT[GTP_HLEN_ERR_OFFSET], 1, 1;
 
@@ -1886,26 +1918,6 @@ Jmul PA_NET_BYPASS,       //Bypass
    And ALU, uqFramePrsReg, {1 << JUMBO_PCKT_STATUS_OFF}, 1;// Check whether packet is jumbo
 
 
-LAND_IPLOCAL_L4ZERO:
-
-Mov ENC_PRI_STORE , ENC_PRI , 2; 
-MovBits ENC_PRI.bit[13] , PA_CASE.bit[13] , 3;
-Mov IND_REG0, {15 << 5}, 2;
-//-- no need do it mannually 
-//MovMul PARSING_DONE_LAB , PARSING_DONE_LAB , LAND_CONT;    
-
-//Mov PC_STACK , ENC_PRO , 2;      
-
-MovMul IC_CNTRL_1_L4ZERO_PORT_OFF, IC_CNTRL_1_LOCALHOST_OFF ,IC_CNTRL_1_LAND_ATTACK_OFF ;
-mov bytmp1, 0, 1;
-MovBits IND_REG0.bit[0] , ENC_PRO.bit[0] , 5 ;
-MovMul  IS_L4PRTZ_CK_DRP ,IS_L3_LOCAL_DRP, IS_L3_LAND_DRP ;     
-
-mov bytmp3, 0, 1;
-jmp  CHK_FAIL_LAB;
-    MovBits bytmp1.BIT[0], CTX_REG[IND_REG0] , 2;
-    Mov uxTmpReg1, ENC_PRO, 2;
-
 
 
 ////////////////////////////////////////////////////////////
@@ -1952,6 +1964,8 @@ indirect PA_NET_BYPASS:
      Nop;
 
 SAMPLE:
+   //both sample 
+   EZstatIncrByOneIndexReg uqTmpReg4;
    //we get here if RED==0 (sample) and action is drop or bypass
    // Sample packet to CPU (50 packets per second)
 
@@ -1978,7 +1992,79 @@ Return;
    Mov bytmp1, 0, 1;
    Nop;
 
-////////////////////////////////////////////////
-//   Jmul fallback - 
-//   Packet Anomalies Failure - Send to CPU Handling
-////////////////////////////////////////////////
+
+L3_IPv6_SUB_HLEN_LAB:
+
+xor CTX_REG[15], ALU, !ALU, 4, IC_CNTRL_0_MREG, MASK_BOTH; // TOPparse MREG[10] 
+Mov bytmp1 , 0 , 1;
+Mov icCtrlType, IC_CNTRL_0_IPv6_HLIM_OFF, 1;         //If tunnel bit is disabled save IC_CNTRL type offset bit for policy checking before sending to CPU (otherwise remains 0)
+// IPv6 sub header's length check
+Jmp CHK_FAIL_LAB, NO_NOP;
+   MovBits bytmp1.BIT[0], CTX_REG[15].BIT[IC_CNTRL_0_IPv6_INC_HDR_OFF], 2;
+   Mov uxTmpReg1, IS_IP6_HE_DRP, 2;
+
+
+///////////////////////////////////
+//    L4 - Tunnel check
+///////////////////////////////////
+
+
+//if  tunnel dosen't  encountered jump to frag check 
+
+
+
+///////////////////////////////////
+//  L4 - GRE\GTP Tunnel failures
+///////////////////////////////////
+
+GRE_UNS_VER_LAB_CHECK:
+//MovBits ENC_PRI.bit[4] , 0 , 1;
+xor CTX_REG[15], ALU, !ALU, 4, IC_CNTRL_1_MREG, MASK_BOTH; // TOPparse MREG[10] 
+Mov bytmp1 , 0 , 1;
+Mov icCtrlType, IC_CNTRL_1_GRE_VERSION_OFF, 1;         //If tunnel bit is disabled save IC_CNTRL type offset bit for policy checking before sending to CPU (otherwise remains 0)
+Jmp CHK_FAIL_LAB, NO_NOP;
+   MovBits bytmp1.BIT[0], CTX_REG[15].BIT[IC_CNTRL_1_GRE_VERSION_OFF], 2;
+   Mov uxTmpReg1, IS_GRE_VER_DRP, 2;
+
+GRE_SRE_NUM_ERROR_LAB:
+
+xor CTX_REG[15], ALU, !ALU, 4, IC_CNTRL_1_MREG, MASK_BOTH; // TOPparse MREG[10] 
+//MovBits ENC_PRI.bit[3] , 0 , 1;
+Mov bytmp1 , 0 , 1;
+Mov icCtrlType, IC_CNTRL_1_GRE_ROUTING_HDR_NUM_OFF, 1; //If tunnel bit is disabled save IC_CNTRL type offset bit for policy checking before sending to CPU (otherwise remains 0)
+Jmp CHK_FAIL_LAB, NO_NOP;
+   MovBits bytmp1.BIT[0], CTX_REG[15].BIT[IC_CNTRL_1_GRE_ROUTING_HDR_NUM_OFF], 2;
+   Mov uxTmpReg1, IS_GRE_ROUT_DRP, 2;
+
+GRE_HLEN_ERR_LAB:
+
+xor CTX_REG[15], ALU, !ALU, 4, IC_CNTRL_1_MREG, MASK_BOTH; // TOPparse MREG[10] 
+//MovBits ENC_PRI.bit[2] , 0 , 1;
+Mov bytmp1 , 0 , 1;
+Mov icCtrlType, IC_CNTRL_1_GRE_INV_HDR_LEN_OFF, 1;     //If tunnel bit is disabled save IC_CNTRL type offset bit for policy checking before sending to CPU (otherwise remains 0)
+Jmp CHK_FAIL_LAB, NO_NOP;
+   MovBits bytmp1.BIT[0], CTX_REG[15].BIT[IC_CNTRL_1_GRE_INV_HDR_LEN_OFF], 2;
+   Mov uxTmpReg1, IS_GRE_HDR_DRP, 2;
+
+GTP_UNS_VER_LAB:
+Mov bytmp1 , 0 , 1;
+Mov icCtrlType, IC_CNTRL_1_INC_VER_GTP_OFF, 1;         //If tunnel bit is disabled save IC_CNTRL type offset bit for policy checking before sending to CPU (otherwise remains 0)
+Jmp CHK_FAIL_LAB, NO_NOP;
+   MovBits bytmp1.BIT[0], actReg0.BIT[IC_CNTRL_1_INC_VER_GTP_OFF], 2;
+   Mov uxTmpReg1, IS_GTP_INC_VER_DRP, 2;
+
+GTP_HLEN_ERR_LAB_CHECK:
+Mov bytmp1 , 0 , 1;
+Mov icCtrlType, IC_CNTRL_1_INC_HLEN_GTP_OFF, 1;        //If tunnel bit is disabled save IC_CNTRL type offset bit for policy checking before sending to CPU (otherwise remains 0)
+Jmp CHK_FAIL_LAB, NO_NOP;
+   MovBits bytmp1.BIT[0], actReg0.BIT[IC_CNTRL_1_INC_HLEN_GTP_OFF], 2;
+   Mov uxTmpReg1, IS_GTP_HLEN_DRP, 2;
+
+L3_UNS_LAB_CHECK:
+xor actReg0, ALU, !ALU, 4, IC_CNTRL_0_MREG, MASK_BOTH; // TOPparse MREG[10]  
+Mov bytmp1 , 0 , 1;
+Mov icCtrlType, IC_CNTRL_0_L3_UNK_OFF, 1;        //If tunnel bit is disabled save IC_CNTRL type offset bit for policy checking before sending to CPU (otherwise remains 0)
+
+Jmp CHK_FAIL_LAB, NO_NOP;
+   MovBits bytmp1.BIT[0], actReg0.BIT[IC_CNTRL_0_L3_UNK_OFF], 2;
+   Mov uxTmpReg1, IS_UN_L3_DRP, 2;  

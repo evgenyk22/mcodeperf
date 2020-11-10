@@ -274,14 +274,15 @@ FRAME_FROM_NW_CAUI_LAB:
    
    If (!FLAGS.BIT[ F_ZR ])  MovBits byCtrlMsgPrs1.bit[MSG_CTRL_TOPPRS_1_RT_EN_BIT], 1, 1; 
    //Mov byVifPortReg , PORT_DATA0, 1;
-   
+    Mov ALU,0,4;
+
    jmul SKIP,                    // CONTINUE: Perform packet parsing (action: FRAME_CONT_ACTION)
      GLOB_CONF_DROP_LAB,         // DROP:     Increment RT counter and discard frame     
      GLOB_CONF_NETWORK_BYPASS_LAB,NO_NOP;  // BYPASS:   Send from Network port to Network port (action: FRAME_BYPASS_NETWORK). This will send to NW after running the parser, which assures that the routing key will be built (in case of routing mode). 
          Mov4Bits ALU.bits[4,3,2,1] , uqGcCtrlReg0.bits[GC_CNTRL_0_ALIST_NONE_EMPTY_BIT,GC_CNTRL_0_POLICY_NON_EMPTY_BIT,GC_CNTRL_0_PROT_DST_NONE_EMPTY_BIT,GC_CNTRL_0_BDOS_EMPTY_SIG_BIT];
    
 SKIP:
-   Mov ALU,0,4;
+  
    PutHdr  HREG[ 1 ], MAIN_LKP;
    Mov2Bits ALU.bits[6,5] , uqGcCtrlReg0.bits[ ~GC_CNTRL_0_ROUTING_ENABLED_BIT , GC_CNTRL_0_ROUTING_ENABLED_BIT];
    //PutKey UNF_VIF_OFF(COM_KBS), PORT_DATA0, 1; 
@@ -378,7 +379,8 @@ PutKey UNF_PROT_VLAN_OFF (COM_KBS), $usrVlanTag , 2;
 GLOB_CONF_NETWORK_BYPASS_LAB:
 // RT monitoring will be supported for bypass global processing mode with really protocol type
 jmp PARSE_AND_CALC_HASH, NO_NOP;
-   Mov uqInReg, 0, 4;
+   //Mov uqInReg, 0, 4;
+   nop;
    Mov PC_STACK, NETW_P0_BYPASS_LAB, 2;
 
 indirect NETW_P0_BYPASS_LAB:
@@ -493,7 +495,8 @@ GLOB_CONF_BYPASS_HOST_LAB:
 // RT monitoring will be supported as really protocol type
 // Perform parsing macro (includes hash calculation)    
 jmp PARSE_AND_CALC_HASH, NO_NOP;
-   Mov uqInReg, 0, 4;
+   //Mov uqInReg, 0, 4;
+   nop;
    Mov PC_STACK, HOST_P0_BYPASS_LAB, 2;
 
 //send 2 cpu righ away
@@ -562,7 +565,8 @@ MovBits  uqGcCtrlReg0.bit[GC_CNTRL_0_PPS_POLICER_EN_BIT] , uqFramePrsReg.bit[L3_
 
 decode  ALU, uqCondReg, 2, MASK_0000000F, MASK_SRC1;
 
-PutKey  UNF_PROT_PHASE_OFF(COM_KBS), uqGcCtrlReg0.byte[2], 2;
+nop;
+//PutKey  UNF_PROT_PHASE_OFF(COM_KBS), uqGcCtrlReg0.byte[2], 2;
 
 mov ENC_PRI,ALU,2;
 
@@ -1075,7 +1079,7 @@ VERIFIED_ACK_RST_LAB:
 
 // Prepare lookup keys fields in KMEM
    MovBits uqSynCookie.bit[24], uqFramePrsReg.BIT[L3_TYPE_OFF] , 1; // uqSynCookie was deleted during CALC_HASH. restoring only IP_VERSION_BIT for TOP Modify usage
-Mov2Bits byTempCondByte1.BITS[0,0], uqInReg.BITS[FRAG_IPv4_OFFSET,FRAG_IPv6_OFFSET];
+Mov2Bits byTempCondByte1.BITS[0,0], uqFramePrsReg.BITS[FRAG_IPv4_OFFSET,FRAG_IPv6_OFFSET];
    Add COM_HBS, COM_HBS, 1, 1;
 If(!byTempCondByte1.BIT[0]) Jmp L4_PORT_KEY_UPDATE0, NO_NOP;
    Copy   UNF_PROT_DPORT_OFF(COM_KBS), TCP_DPRT_OFF(FMEM_BASE), 2, SWAP;
@@ -1182,7 +1186,7 @@ Copy   UNF_PROT_SPORT_OFF_KMEM (COM_KBS), TCP_SPRT_OFF(FMEM_BASE), 2;
 // Prepare lookup keys fields in KMEM
 //MovBits byTempCondByte1.BIT[0], uqFramePrsReg.BIT[L3_FRAG_OFF], 1;
 //uqInReg.BIT[FRAG_IPv4_OFFSET] is set only if it is a non first fragment. same for uqInReg.BIT[FRAG_IPv6_OFFSET]
-Mov2Bits byTempCondByte1.BITS[0,0], uqInReg.BITS[FRAG_IPv4_OFFSET,FRAG_IPv6_OFFSET];
+Mov2Bits byTempCondByte1.BITS[0,0], uqFramePrsReg.BITS[FRAG_IPv4_OFFSET,FRAG_IPv6_OFFSET];
    Add COM_HBS, COM_HBS, 1, 1;
 If(!byTempCondByte1.BIT[0]) Jmp L4_PORT_KEY_UPDATE1, NO_NOP; // if first frag
    Copy   UNF_PROT_DPORT_OFF(COM_KBS), TCP_DPRT_OFF(FMEM_BASE), 2, SWAP;
